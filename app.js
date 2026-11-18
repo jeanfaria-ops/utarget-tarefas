@@ -686,36 +686,61 @@ async function abrir(id) {
 // ---------------------------------------------------------------- nova tarefa (modelo ou avulsa)
 const passosTxt = (m) => { const n = (m.checklist || []).length; return n ? plural(n, "passo", "passos") : "sem checklist"; };
 const nomeDep = (id) => st.deptos.find((d) => d.id === id)?.nome || "Sem departamento";
-async function novaTarefa() {
+async function novaTarefa(depIni) {
   const g = gaveta(`
-    <div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Nova tarefa</div><h3>Qual tarefa?</h3>
-      <div class="gc">Escolha um modelo: checklist, departamento e prazo já vêm prontos.</div>
-      <label class="busca" style="margin:14px 0 0;flex:none;display:block">${I.busca}<input id="mp-q" type="search" placeholder="Buscar modelo: rescisão, CMDCA, alvará…" autocomplete="off"></label></div>
+    <div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Nova tarefa</div><h3 id="mp-h">Qual departamento?</h3>
+      <div class="gc" id="mp-s">Escolha o departamento para ver só os modelos dele.</div>
+      <label class="busca" style="margin:14px 0 0;flex:none;display:block">${I.busca}<input id="mp-q" type="search" placeholder="Ou busque direto: rescisão, CMDCA, alvará…" autocomplete="off"></label></div>
     <div class="gb" id="mp-l"><div class="sk" style="height:300px"></div></div>`);
   setTimeout(() => $("#mp-q", g)?.focus(), 60);
   await listas();
+  let dep = depIni !== undefined ? depIni : ls.get("ultimoDep", null);
+  if (dep != null && !st.modelos.some((m) => m.departamento_id === dep)) dep = null;
   const recentes = ls.get("modelosRecentes", []);
   const meusDeps = (st.eu.departamentos || []).map(String);
+  const item = (m, comDep) => `<button class="mp-i" data-m="${m.id}"><div><div class="mp-n">${esc(m.nome)}</div><div class="mp-d">${comDep ? esc(nomeDep(m.departamento_id)) + " · " : ""}${passosTxt(m)}${m.dias_prazo != null ? ` · prazo ${m.dias_prazo}d` : ""}</div></div><span class="pill neu">${esc(TIPOS.find((t) => t[0] === m.tipo)?.[1] || m.tipo)}</span></button>`;
+  const avulsa = `<button class="mp-i mp-av" data-m=""><div><div class="mp-n">${I.mais.replace("<svg", '<svg width="16" height="16" style="vertical-align:-3px;margin-right:6px"')}Tarefa avulsa${dep != null ? " · " + esc(nomeDep(dep)) : ""}</div><div class="mp-d">Sem modelo: você define tudo, inclusive o checklist.</div></div></button>`;
+  const liga = () => {
+    $$("[data-m]", g).forEach((b) => (b.onclick = () => formTarefa(st.modelos.find((m) => m.id === b.dataset.m) || null, dep)));
+    $$("[data-dep]", g).forEach((b) => (b.onclick = () => { dep = b.dataset.dep === "" ? null : +b.dataset.dep; ls.set("ultimoDep", dep); $("#mp-q", g).value = ""; pinta(); $("#mp-q", g).focus(); }));
+  };
   const pinta = () => {
     const q = $("#mp-q", g).value.trim().toLowerCase();
-    const ms = st.modelos.filter((m) => !q || (m.nome + " " + nomeDep(m.departamento_id)).toLowerCase().includes(q));
-    const rec = q ? [] : recentes.map((id) => st.modelos.find((m) => m.id === id)).filter(Boolean).slice(0, 5);
-    const grupos = new Map();
-    for (const m of ms) { const k = nomeDep(m.departamento_id); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(m); }
-    const ordem = [...grupos.keys()].sort((a, b) => (meusDeps.includes(b) - meusDeps.includes(a)) || a.localeCompare(b));
-    const item = (m) => `<button class="mp-i" data-m="${m.id}"><div><div class="mp-n">${esc(m.nome)}</div><div class="mp-d">${esc(nomeDep(m.departamento_id))} · ${passosTxt(m)}${m.dias_prazo != null ? ` · prazo ${m.dias_prazo}d` : ""}</div></div><span class="pill neu">${esc(TIPOS.find((t) => t[0] === m.tipo)?.[1] || m.tipo)}</span></button>`;
-    $("#mp-l", g).innerHTML = `
-      <button class="mp-i mp-av" data-m=""><div><div class="mp-n">${I.mais.replace("<svg", '<svg width="16" height="16" style="vertical-align:-3px;margin-right:6px"')}Tarefa avulsa</div><div class="mp-d">Sem modelo: você define tudo, inclusive o checklist.</div></div></button>
-      ${rec.length ? `<div class="mp-g">Usados recentemente</div><div class="lista">${rec.map(item).join("")}</div>` : ""}
-      ${ordem.map((k) => `<div class="mp-g">${esc(k)} <span class="ct">${grupos.get(k).length}</span></div><div class="lista">${grupos.get(k).map(item).join("")}</div>`).join("") || (q ? `<div class="vazio-g">Nenhum modelo com “${esc(q)}”. Use tarefa avulsa${gestor() ? " ou crie o modelo em Modelos" : ""}.</div>` : "")}`;
-    $$("[data-m]", g).forEach((b) => (b.onclick = () => formTarefa(st.modelos.find((m) => m.id === b.dataset.m) || null)));
+    const h = $("#mp-h", g), sub = $("#mp-s", g);
+    // 1) sem departamento e sem busca: grade de departamentos
+    if (dep == null && !q) {
+      h.textContent = "Qual departamento?"; sub.textContent = "Escolha o departamento para ver só os modelos dele.";
+      $("#mp-q", g).placeholder = "Ou busque direto: rescisão, CMDCA, alvará…";
+      const cont = new Map(); st.modelos.forEach((m) => cont.set(m.departamento_id, (cont.get(m.departamento_id) || 0) + 1));
+      const deps = [...cont.keys()].map((id) => ({ id, nome: nomeDep(id), n: cont.get(id), meu: meusDeps.includes(nomeDep(id)) || meusDeps.includes(String(id)) }))
+        .sort((a, b) => (b.meu - a.meu) || a.nome.localeCompare(b.nome));
+      const rec = recentes.map((id) => st.modelos.find((m) => m.id === id)).filter(Boolean).slice(0, 4);
+      $("#mp-l", g).innerHTML = `
+        <div class="dep-g">${deps.map((d) => `<button class="dep-t ${d.meu ? "meu" : ""}" data-dep="${d.id ?? ""}"><span class="dn">${esc(d.nome)}</span><span class="dc">${plural(d.n, "modelo", "modelos")}</span></button>`).join("")}</div>
+        ${rec.length ? `<div class="mp-g">Usados recentemente</div><div class="lista">${rec.map((m) => item(m, true)).join("")}</div>` : ""}
+        <div style="margin-top:16px">${avulsa}</div>`;
+      return liga();
+    }
+    // 2) com departamento (e/ou busca)
+    const ms = st.modelos.filter((m) => (dep == null || m.departamento_id === dep) && (!q || m.nome.toLowerCase().includes(q)));
+    h.textContent = dep != null ? nomeDep(dep) : "Buscando em todos";
+    sub.innerHTML = dep != null ? `${plural(st.modelos.filter((m) => m.departamento_id === dep).length, "modelo", "modelos")} · <button class="link" data-dep="">trocar departamento</button>` : `<button class="link" data-dep="">‹ voltar aos departamentos</button>`;
+    $("#mp-q", g).placeholder = dep != null ? `Buscar em ${nomeDep(dep)}` : "Buscar modelo";
+    const recIds = new Set(recentes);
+    const rec = q ? [] : ms.filter((m) => recIds.has(m.id)).sort((a, b) => recentes.indexOf(a.id) - recentes.indexOf(b.id)).slice(0, 4);
+    const resto = rec.length ? ms.filter((m) => !rec.includes(m)) : ms;
+    $("#mp-l", g).innerHTML = `${avulsa}
+      ${rec.length ? `<div class="mp-g">Usados recentemente</div><div class="lista">${rec.map((m) => item(m, dep == null)).join("")}</div>` : ""}
+      ${resto.length ? `<div class="mp-g">${rec.length ? "Todos" : "Modelos"} <span class="ct">${resto.length}</span></div><div class="lista">${resto.map((m) => item(m, dep == null)).join("")}</div>`
+        : `<div class="vazio-g">Nenhum modelo${q ? ` com “${esc(q)}”` : ""}${dep != null ? " neste departamento" : ""}. ${dep != null && q ? '<button class="link" data-dep="">Buscar em todos</button>' : "Use tarefa avulsa."}</div>`}`;
+    liga();
   };
   $("#mp-q", g).oninput = pinta;
   $("#mp-q", g).onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("#mp-l [data-m]:not(.mp-av)", g)?.click(); } };
   pinta();
 }
 
-function formTarefa(mod) {
+function formTarefa(mod, depSel = null) {
   const hoje = hojeISO();
   const ck = (mod?.checklist || []).map((i) => i.texto);
   const g = gaveta(`
@@ -729,7 +754,7 @@ function formTarefa(mod) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">
         <div class="campo"><label for="nt-venc">Prazo</label><input id="nt-venc" type="date" value="${mod?.dias_prazo != null ? addD(hoje, mod.dias_prazo) : ""}"></div>
         <div class="campo"><label for="nt-meta">Meta interna</label><input id="nt-meta" type="date" value="${mod?.dias_meta != null ? addD(hoje, mod.dias_meta) : ""}"></div>
-        <div class="campo" ${mod ? "hidden" : ""}><label for="nt-dep">Departamento</label><select id="nt-dep"><option value="">—</option>${st.deptos.map((d) => `<option value="${d.id}" ${mod?.departamento_id === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}</select></div>
+        <div class="campo" ${mod ? "hidden" : ""}><label for="nt-dep">Departamento</label><select id="nt-dep"><option value="">—</option>${st.deptos.map((d) => `<option value="${d.id}" ${(mod ? mod.departamento_id : depSel) === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}</select></div>
         <div class="campo" ${mod ? "hidden" : ""}><label for="nt-tipo">Tipo</label><select id="nt-tipo">${TIPOS.map(([k, n]) => `<option value="${k}" ${(mod?.tipo || "interna") === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>
       </div>
       <div class="campo"><label for="nt-resp">Responsável</label><select id="nt-resp"><option value="">Automático pela carteira do cliente</option>${st.usuarios.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join("")}</select></div>
@@ -744,7 +769,7 @@ function formTarefa(mod) {
     <div class="gf"><button class="btn s" id="nt-cancel">Cancelar</button><button class="btn p" id="nt-ok">${I.mais} Criar tarefa</button></div>`);
   setTimeout(() => $(mod ? "#nt-cli" : "#nt-tit", g)?.focus(), 60);
   $("#nt-cancel", g).onclick = () => fecharGaveta();
-  $("#nt-volta", g).onclick = () => novaTarefa();
+  $("#nt-volta", g).onclick = () => novaTarefa(depSel);
   const extras = [];
   const pinta = () => { $("#nt-itens", g).innerHTML = extras.map((t, i) => `<div class="ck-x"><span>${esc(t)}</span><button type="button" class="ib" data-rm="${i}" aria-label="Remover">${I.x}</button></div>`).join("");
     $$("[data-rm]", g).forEach((b) => (b.onclick = () => { extras.splice(+b.dataset.rm, 1); pinta(); })); };

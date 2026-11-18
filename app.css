@@ -387,3 +387,9 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .ck-x span{flex:1}
 .ck-x .ib,.ib.mini{width:28px;height:28px;border:0;background:none;font-weight:700}
 .ib.mini:disabled{opacity:.3;cursor:default}
+.dep-g{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.dep-t{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:12px 14px;border:1px solid var(--linha);border-radius:12px;background:var(--sup);min-height:64px}
+.dep-t:hover,.dep-t:focus-visible{border-color:var(--azul);background:color-mix(in srgb,var(--azul) 6%,var(--sup))}
+.dep-t .dn{font-weight:700;font-size:13.5px;line-height:1.25}
+.dep-t .dc{font-size:12px;color:var(--ink3)}
+.dep-t.meu{border-left:3px solid var(--laranja)}
