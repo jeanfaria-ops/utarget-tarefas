@@ -146,7 +146,7 @@ function universo() { // tarefas no escopo atual (Minhas / Equipe)
 // ---------------------------------------------------------------- casca
 function casca() {
   const nEntrada = st.base.filter((t) => t.status === "entrada").length;
-  const abas = [["painel", "Painel", I.painel], ["hoje", "Tarefas", I.hoje]].concat(gestor() ? [["entrada", "Entrada", I.entrada]] : []);
+  const abas = [["painel", "Painel", I.painel], ["hoje", "Tarefas", I.hoje]].concat(gestor() ? [["entrada", "Entrada", I.entrada]] : []).concat([["modelos", "Modelos", I.lista]]);
   const tema = ls.get("tema", "auto");
   app.innerHTML = `
   <div class="shell">
@@ -182,7 +182,7 @@ function casca() {
   <nav class="tabbar" style="--n:${abas.length + (podeCriar() ? 1 : 0)}" aria-label="Principal">
     ${abas.slice(0, 2).map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span></button>`).join("")}
     ${podeCriar() ? `<button id="nova-m">${I.mais}<span>Nova</span></button>` : ""}
-    ${abas.slice(2).map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span>${nEntrada ? `<span class="badge">${nEntrada}</span>` : ""}</button>`).join("")}
+    ${abas.slice(2).map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span>${k === "entrada" && nEntrada ? `<span class="badge">${nEntrada}</span>` : ""}</button>`).join("")}
   </nav>`;
   $$("[data-v]").forEach((b) => (b.onclick = () => irPara(b.dataset.v)));
   $$("[data-e]").forEach((b) => (b.onclick = () => { st.escopo = b.dataset.e; ls.set("escopo", st.escopo); casca(); renderView(); }));
@@ -192,7 +192,7 @@ function casca() {
   if ($("#nova")) $("#nova").onclick = () => novaTarefa();
   if ($("#nova-m")) $("#nova-m").onclick = () => novaTarefa();
   const q = $("#q");
-  q.oninput = () => { st.f.q = q.value; if (st.view === "painel" && q.value) { st.view = "hoje"; atualizaNav(); } renderView(); };
+  q.oninput = () => { st.f.q = q.value; if ((st.view === "painel" || st.view === "modelos") && q.value) { st.view = "hoje"; atualizaNav(); } renderView(); };
 }
 function atualizaNav() { $$("[data-v]").forEach((b) => (b.dataset.v === st.view ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"))); ls.set("view", st.view); }
 function irPara(v, filtros) {
@@ -206,6 +206,7 @@ function renderView() {
   if (!$("#view")) return;
   if (!st.carregado) return esqueleto();
   if (st.view === "painel") painel();
+  else if (st.view === "modelos") telaModelos();
   else lista(st.view === "entrada");
 }
 function esqueleto() {
@@ -682,70 +683,91 @@ async function abrir(id) {
   }));
 }
 
-// ---------------------------------------------------------------- nova tarefa
+// ---------------------------------------------------------------- nova tarefa (modelo ou avulsa)
+const passosTxt = (m) => { const n = (m.checklist || []).length; return n ? plural(n, "passo", "passos") : "sem checklist"; };
+const nomeDep = (id) => st.deptos.find((d) => d.id === id)?.nome || "Sem departamento";
 async function novaTarefa() {
   const g = gaveta(`
-    <div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Nova tarefa</div><h3>O que precisa ser feito?</h3></div>
+    <div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Nova tarefa</div><h3>Qual tarefa?</h3>
+      <div class="gc">Escolha um modelo: checklist, departamento e prazo já vêm prontos.</div>
+      <label class="busca" style="margin:14px 0 0;flex:none;display:block">${I.busca}<input id="mp-q" type="search" placeholder="Buscar modelo: rescisão, CMDCA, alvará…" autocomplete="off"></label></div>
+    <div class="gb" id="mp-l"><div class="sk" style="height:300px"></div></div>`);
+  setTimeout(() => $("#mp-q", g)?.focus(), 60);
+  await listas();
+  const recentes = ls.get("modelosRecentes", []);
+  const meusDeps = (st.eu.departamentos || []).map(String);
+  const pinta = () => {
+    const q = $("#mp-q", g).value.trim().toLowerCase();
+    const ms = st.modelos.filter((m) => !q || (m.nome + " " + nomeDep(m.departamento_id)).toLowerCase().includes(q));
+    const rec = q ? [] : recentes.map((id) => st.modelos.find((m) => m.id === id)).filter(Boolean).slice(0, 5);
+    const grupos = new Map();
+    for (const m of ms) { const k = nomeDep(m.departamento_id); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(m); }
+    const ordem = [...grupos.keys()].sort((a, b) => (meusDeps.includes(b) - meusDeps.includes(a)) || a.localeCompare(b));
+    const item = (m) => `<button class="mp-i" data-m="${m.id}"><div><div class="mp-n">${esc(m.nome)}</div><div class="mp-d">${esc(nomeDep(m.departamento_id))} · ${passosTxt(m)}${m.dias_prazo != null ? ` · prazo ${m.dias_prazo}d` : ""}</div></div><span class="pill neu">${esc(TIPOS.find((t) => t[0] === m.tipo)?.[1] || m.tipo)}</span></button>`;
+    $("#mp-l", g).innerHTML = `
+      <button class="mp-i mp-av" data-m=""><div><div class="mp-n">${I.mais.replace("<svg", '<svg width="16" height="16" style="vertical-align:-3px;margin-right:6px"')}Tarefa avulsa</div><div class="mp-d">Sem modelo: você define tudo, inclusive o checklist.</div></div></button>
+      ${rec.length ? `<div class="mp-g">Usados recentemente</div><div class="lista">${rec.map(item).join("")}</div>` : ""}
+      ${ordem.map((k) => `<div class="mp-g">${esc(k)} <span class="ct">${grupos.get(k).length}</span></div><div class="lista">${grupos.get(k).map(item).join("")}</div>`).join("") || (q ? `<div class="vazio-g">Nenhum modelo com “${esc(q)}”. Use tarefa avulsa${gestor() ? " ou crie o modelo em Modelos" : ""}.</div>` : "")}`;
+    $$("[data-m]", g).forEach((b) => (b.onclick = () => formTarefa(st.modelos.find((m) => m.id === b.dataset.m) || null)));
+  };
+  $("#mp-q", g).oninput = pinta;
+  $("#mp-q", g).onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("#mp-l [data-m]:not(.mp-av)", g)?.click(); } };
+  pinta();
+}
+
+function formTarefa(mod) {
+  const hoje = hojeISO();
+  const ck = (mod?.checklist || []).map((i) => i.texto);
+  const g = gaveta(`
+    <div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button>
+      <div class="ey"><button class="link" id="nt-volta" style="font-size:11px;letter-spacing:.7px">‹ TROCAR</button> · ${mod ? "Modelo · " + esc(nomeDep(mod.departamento_id)) : "Tarefa avulsa"}</div>
+      <h3>${mod ? esc(mod.nome) : "O que precisa ser feito?"}</h3>
+      ${mod ? `<div class="gc">${passosTxt(mod)} prontos${mod.dias_prazo != null ? ` · prazo padrão de ${mod.dias_prazo} dias` : ""}</div>` : ""}</div>
     <form class="gb" id="nt" autocomplete="off">
-      <div class="campo" style="margin-top:0"><label for="nt-tit">Título</label><input id="nt-tit" required placeholder="Ex.: Enviar balancete de outubro para a diretoria"></div>
-      <div class="campo" id="nt-mod-w" hidden><label for="nt-mod">Modelo</label><select id="nt-mod"><option value="">Sem modelo</option></select></div>
-      <div class="campo"><label for="nt-cli">Cliente</label><input id="nt-cli" list="nt-cli-l" placeholder="Digite para buscar (opcional)"><datalist id="nt-cli-l"></datalist></div>
+      <div class="campo" style="margin-top:0"><label for="nt-cli">Cliente</label><input id="nt-cli" list="nt-cli-l" placeholder="Digite para buscar${mod ? "" : " (opcional)"}"><datalist id="nt-cli-l">${st.clientes.map((c) => `<option value="${esc(c.nome)}">${esc(c.razao_social || "")}</option>`).join("")}</datalist></div>
+      <div class="campo"><label for="nt-tit">Título</label><input id="nt-tit" value="${esc(mod?.nome || "")}" placeholder="Ex.: Enviar balancete de outubro para a diretoria"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">
-        <div class="campo"><label for="nt-dep">Departamento</label><select id="nt-dep"><option value="">—</option></select></div>
-        <div class="campo"><label for="nt-tipo">Tipo</label><select id="nt-tipo">${TIPOS.map(([k, n]) => `<option value="${k}">${n}</option>`).join("")}</select></div>
-        <div class="campo"><label for="nt-venc">Prazo</label><input id="nt-venc" type="date"></div>
-        <div class="campo"><label for="nt-meta">Meta interna</label><input id="nt-meta" type="date"></div>
+        <div class="campo"><label for="nt-venc">Prazo</label><input id="nt-venc" type="date" value="${mod?.dias_prazo != null ? addD(hoje, mod.dias_prazo) : ""}"></div>
+        <div class="campo"><label for="nt-meta">Meta interna</label><input id="nt-meta" type="date" value="${mod?.dias_meta != null ? addD(hoje, mod.dias_meta) : ""}"></div>
+        <div class="campo" ${mod ? "hidden" : ""}><label for="nt-dep">Departamento</label><select id="nt-dep"><option value="">—</option>${st.deptos.map((d) => `<option value="${d.id}" ${mod?.departamento_id === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}</select></div>
+        <div class="campo" ${mod ? "hidden" : ""}><label for="nt-tipo">Tipo</label><select id="nt-tipo">${TIPOS.map(([k, n]) => `<option value="${k}" ${(mod?.tipo || "interna") === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>
       </div>
-      <div class="campo"><label for="nt-resp">Responsável</label><select id="nt-resp"><option value="">Automático pela carteira do cliente</option></select></div>
+      <div class="campo"><label for="nt-resp">Responsável</label><select id="nt-resp"><option value="">Automático pela carteira do cliente</option>${st.usuarios.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join("")}</select></div>
       <label style="display:flex;align-items:center;gap:10px;margin-top:14px;font-size:13px;font-weight:600"><input type="checkbox" id="nt-multa" style="width:18px;height:18px"> Gera multa se atrasar</label>
-      <div class="campo"><label for="nt-desc">Descrição</label><textarea id="nt-desc" rows="3" placeholder="Contexto, links, o que o cliente pediu…"></textarea></div>
-      <div class="bloco"><h4>Checklist</h4><div id="nt-itens" style="display:grid;gap:6px"></div>
-        <div class="campo" style="grid-template-columns:1fr auto;margin-top:6px"><input id="nt-item" placeholder="Adicionar passo e Enter"><button class="btn s" type="button" id="nt-add" style="height:40px">${I.mais}</button></div></div>
-      ${gestor() ? `<label style="display:flex;align-items:center;gap:10px;margin-top:16px;font-size:13px;font-weight:600"><input type="checkbox" id="nt-salvamod" style="width:18px;height:18px"> Salvar também como modelo reutilizável</label>` : ""}
+      <div class="campo"><label for="nt-desc">${mod ? "Observação para quem vai fazer" : "Descrição"}</label><textarea id="nt-desc" rows="2" placeholder="Contexto, links, o que o cliente pediu…"></textarea></div>
+      <div class="bloco"><h4>Checklist</h4>
+        ${ck.length ? `<details class="ck-mod"><summary>${plural(ck.length, "passo do modelo", "passos do modelo")} <span>ver</span></summary><ol>${ck.map((t) => `<li>${esc(t)}</li>`).join("")}</ol></details>` : ""}
+        <div id="nt-itens" style="display:grid;gap:6px;margin-top:6px"></div>
+        <div class="campo" style="grid-template-columns:1fr auto;margin-top:6px"><input id="nt-item" placeholder="${ck.length ? "Passo extra só desta tarefa (opcional)" : "Adicionar passo e Enter"}"><button class="btn s" type="button" id="nt-add" style="height:40px" aria-label="Adicionar passo">${I.mais}</button></div></div>
+      ${!mod && gestor() ? `<label style="display:flex;align-items:center;gap:10px;margin-top:16px;font-size:13px;font-weight:600"><input type="checkbox" id="nt-salvamod" style="width:18px;height:18px"> Salvar também como modelo reutilizável</label>` : ""}
     </form>
     <div class="gf"><button class="btn s" id="nt-cancel">Cancelar</button><button class="btn p" id="nt-ok">${I.mais} Criar tarefa</button></div>`);
-  $("#nt-tit", g).focus();
+  setTimeout(() => $(mod ? "#nt-cli" : "#nt-tit", g)?.focus(), 60);
   $("#nt-cancel", g).onclick = () => fecharGaveta();
-  const itens = [];
-  const pinta = () => { $("#nt-itens", g).innerHTML = itens.map((t, i) => `<div style="display:flex;align-items:center;gap:8px;background:var(--sup2);border-radius:10px;padding:8px 8px 8px 12px;font-size:13.5px"><span style="flex:1">${esc(t)}</span><button type="button" class="ib" style="width:28px;height:28px;border:0;background:none" data-rm="${i}" aria-label="Remover">${I.x}</button></div>`).join("");
-    $$("[data-rm]", g).forEach((b) => (b.onclick = () => { itens.splice(+b.dataset.rm, 1); pinta(); })); };
-  const add = () => { const v = $("#nt-item", g).value.trim(); if (v) { itens.push(v); $("#nt-item", g).value = ""; pinta(); } $("#nt-item", g).focus(); };
+  $("#nt-volta", g).onclick = () => novaTarefa();
+  const extras = [];
+  const pinta = () => { $("#nt-itens", g).innerHTML = extras.map((t, i) => `<div class="ck-x"><span>${esc(t)}</span><button type="button" class="ib" data-rm="${i}" aria-label="Remover">${I.x}</button></div>`).join("");
+    $$("[data-rm]", g).forEach((b) => (b.onclick = () => { extras.splice(+b.dataset.rm, 1); pinta(); })); };
+  const add = () => { const v = $("#nt-item", g).value.trim(); if (v) { extras.push(v); $("#nt-item", g).value = ""; pinta(); } $("#nt-item", g).focus(); };
   $("#nt-add", g).onclick = add;
   $("#nt-item", g).onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } };
   $("#nt", g).onsubmit = (e) => e.preventDefault();
-
-  await listas();
-  $("#nt-cli-l", g).innerHTML = st.clientes.map((c) => `<option value="${esc(c.nome)}">${esc(c.razao_social || "")}</option>`).join("");
-  $("#nt-dep", g).innerHTML += st.deptos.map((d) => `<option value="${d.id}">${esc(d.nome)}</option>`).join("");
-  $("#nt-resp", g).innerHTML += st.usuarios.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join("");
-  if (st.modelos.length) {
-    $("#nt-mod-w", g).hidden = false;
-    $("#nt-mod", g).innerHTML += st.modelos.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join("");
-    $("#nt-mod", g).onchange = (e) => {
-      const m = st.modelos.find((x) => x.id === e.target.value); if (!m) return;
-      if (!$("#nt-tit", g).value) $("#nt-tit", g).value = m.nome;
-      if (m.departamento_id) $("#nt-dep", g).value = m.departamento_id;
-      if (m.tipo) $("#nt-tipo", g).value = m.tipo;
-      if (m.dias_prazo != null) $("#nt-venc", g).value = addD(hojeISO(), m.dias_prazo);
-      if (m.dias_meta != null) $("#nt-meta", g).value = addD(hojeISO(), m.dias_meta);
-    };
-  }
   $("#nt-ok", g).onclick = async () => {
     const tit = $("#nt-tit", g).value.trim();
     if (!tit) { $("#nt-tit", g).focus(); return toast("Informe o título"); }
     const nomeCli = $("#nt-cli", g).value.trim();
     const cli = nomeCli ? st.clientes.find((c) => c.nome === nomeCli || c.razao_social === nomeCli) : null;
     if (nomeCli && !cli) { $("#nt-cli", g).focus(); return toast("Escolha o cliente na lista"); }
-    const mod = $("#nt-mod", g)?.value || null;
     const bt = $("#nt-ok", g); bt.disabled = true; bt.textContent = "Criando…";
     const p = { p_titulo: tit, p_tipo: $("#nt-tipo", g).value, p_entidade: cli?.id || null, p_departamento: +$("#nt-dep", g).value || null,
       p_responsavel: $("#nt-resp", g).value || null, p_vencimento: $("#nt-venc", g).value || null, p_meta: $("#nt-meta", g).value || null,
-      p_descricao: $("#nt-desc", g).value, p_gera_multa: $("#nt-multa", g).checked, p_prioridade: 2, p_modelo: mod, p_itens: itens };
+      p_descricao: $("#nt-desc", g).value, p_gera_multa: $("#nt-multa", g).checked, p_prioridade: 2, p_modelo: mod?.id || null, p_itens: extras };
     const { data: id, error } = await sb.rpc("app_nova_tarefa", p);
     if (error) { bt.disabled = false; bt.innerHTML = `${I.mais} Criar tarefa`; return toast("Não criou: " + error.message); }
+    if (mod) ls.set("modelosRecentes", [mod.id, ...ls.get("modelosRecentes", []).filter((x) => x !== mod.id)].slice(0, 8));
     if ($("#nt-salvamod", g)?.checked) {
-      const v = p.p_vencimento ? diff(p.p_vencimento, hojeISO()) : null, m = p.p_meta ? diff(p.p_meta, hojeISO()) : null;
-      const r = await sb.from("modelos").insert({ nome: tit, tipo: p.p_tipo, departamento_id: p.p_departamento, checklist: itens.map((t) => ({ texto: t })), dias_prazo: v, dias_meta: m, ativo: true });
+      const r = await sb.from("modelos").insert({ nome: tit, tipo: p.p_tipo, departamento_id: p.p_departamento, checklist: extras.map((t) => ({ texto: t })),
+        dias_prazo: p.p_vencimento ? diff(p.p_vencimento, hoje) : null, dias_meta: p.p_meta ? diff(p.p_meta, hoje) : null, ativo: true });
       if (r.error) toast("Tarefa criada, mas o modelo não salvou: " + r.error.message); else st.modelos = [];
     }
     fecharGaveta();
@@ -755,7 +777,92 @@ async function novaTarefa() {
   };
 }
 
-let _rz; addEventListener("resize", () => { clearTimeout(_rz); _rz = setTimeout(() => st.view === "painel" && st.carregado && !$(".gav") && painel(), 200); });
+// ---------------------------------------------------------------- modelos (layouts de tarefas e solicitações)
+async function telaModelos() {
+  cabecalho("Modelos", "Layouts de tarefas e solicitações com checklist pronto");
+  $("#view").innerHTML = '<div class="sk" style="height:400px"></div>';
+  const { data, error } = await sb.from("modelos").select("id,nome,tipo,departamento_id,checklist,dias_meta,dias_prazo,ativo,gclick_processo_id").order("nome");
+  if (error) { $("#view").innerHTML = `<div class="vazio"><h3>Não carregou</h3>${esc(error.message)}</div>`; return; }
+  await listas();
+  st.todosModelos = data || [];
+  const f = st.fm || (st.fm = { q: "", dep: "", inativos: false });
+  const pinta = () => {
+    const q = f.q.toLowerCase();
+    const l = st.todosModelos.filter((m) => (f.inativos || m.ativo) && (!f.dep || String(m.departamento_id) === f.dep) && (!q || m.nome.toLowerCase().includes(q)));
+    const deps = [...new Set(st.todosModelos.map((m) => m.departamento_id))].map((id) => [id, nomeDep(id)]).sort((a, b) => a[1].localeCompare(b[1]));
+    $("#view").innerHTML = `
+      <div class="filtros" style="margin-bottom:14px">
+        <label class="busca" style="margin:0;flex:0 1 320px">${I.busca}<input id="fm-q" type="search" placeholder="Buscar modelo" value="${esc(f.q)}"></label>
+        <select class="sel" id="fm-dep"><option value="">Todos os departamentos</option>${deps.map(([id, n]) => `<option value="${id}" ${f.dep === String(id) ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+        <button class="chip" id="fm-in" aria-pressed="${f.inativos}">Mostrar inativos</button>
+        <span class="esp"></span>
+        ${gestor() ? `<button class="btn p" id="fm-novo" style="height:36px">${I.mais} Novo modelo</button>` : ""}
+      </div>
+      <div class="lista">${l.map((m) => `
+        <button class="row mrow" data-id="${m.id}" style="grid-template-columns:1fr auto;width:100%;text-align:left">
+          <div style="min-width:0"><div class="rt">${esc(m.nome)}</div>
+            <div class="rm"><span class="cl">${esc(nomeDep(m.departamento_id))}</span><span class="sep"></span><span>${passosTxt(m)}</span>${m.dias_prazo != null ? `<span class="sep"></span><span>prazo ${m.dias_prazo}d</span>` : ""}${m.gclick_processo_id ? '<span class="sep hm"></span><span class="hm">veio do G-Click</span>' : ""}</div></div>
+          <div class="rd"><span class="pill neu">${esc(TIPOS.find((t) => t[0] === m.tipo)?.[1] || m.tipo)}</span>${m.ativo ? "" : '<span class="pill risco">Inativo</span>'}</div>
+        </button>`).join("") || '<div class="vazio-g" style="padding:22px">Nenhum modelo.</div>'}</div>
+      <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">${plural(l.length, "modelo", "modelos")}</div>`;
+    $("#fm-q").oninput = (e) => { f.q = e.target.value; const pos = e.target.selectionStart; pinta(); const i = $("#fm-q"); i.focus(); i.setSelectionRange(pos, pos); };
+    $("#fm-dep").onchange = (e) => { f.dep = e.target.value; pinta(); };
+    $("#fm-in").onclick = () => { f.inativos = !f.inativos; pinta(); };
+    if ($("#fm-novo")) $("#fm-novo").onclick = () => editarModelo(null, pinta);
+    $$(".mrow").forEach((b) => (b.onclick = () => editarModelo(st.todosModelos.find((m) => m.id === b.dataset.id), pinta)));
+  };
+  pinta();
+}
+
+function editarModelo(m, depois) {
+  const pode = gestor();
+  const itens = (m?.checklist || []).map((i) => i.texto);
+  const g = gaveta(`
+    <div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">${m ? "Modelo" : "Novo modelo"}</div><h3>${m ? esc(m.nome) : "Layout de tarefa"}</h3>
+      ${pode ? "" : '<div class="gc">Só líderes e administradores editam modelos.</div>'}</div>
+    <div class="gb">
+      <div class="campo" style="margin-top:0"><label for="me-nome">Nome</label><input id="me-nome" value="${esc(m?.nome || "")}" ${pode ? "" : "disabled"}></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">
+        <div class="campo"><label for="me-dep">Departamento</label><select id="me-dep" ${pode ? "" : "disabled"}><option value="">—</option>${st.deptos.map((d) => `<option value="${d.id}" ${m?.departamento_id === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}</select></div>
+        <div class="campo"><label for="me-tipo">Tipo</label><select id="me-tipo" ${pode ? "" : "disabled"}>${TIPOS.map(([k, n]) => `<option value="${k}" ${(m?.tipo || "solicitacao") === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+        <div class="campo"><label for="me-meta">Meta (dias)</label><input id="me-meta" type="number" min="0" value="${m?.dias_meta ?? ""}" ${pode ? "" : "disabled"}></div>
+        <div class="campo"><label for="me-prazo">Prazo (dias)</label><input id="me-prazo" type="number" min="0" value="${m?.dias_prazo ?? ""}" ${pode ? "" : "disabled"}></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;margin-top:14px;font-size:13px;font-weight:600"><input type="checkbox" id="me-ativo" style="width:18px;height:18px" ${m?.ativo === false ? "" : "checked"} ${pode ? "" : "disabled"}> Ativo (aparece ao criar tarefa)</label>
+      <div class="bloco"><h4>Checklist <span id="me-n" style="letter-spacing:0;text-transform:none;font-weight:600"></span></h4><div id="me-itens" class="lista"></div>
+        ${pode ? `<div class="campo" style="grid-template-columns:1fr auto;margin-top:8px"><input id="me-item" placeholder="Adicionar passo e Enter"><button class="btn s" type="button" id="me-add" style="height:40px" aria-label="Adicionar">${I.mais}</button></div>` : ""}</div>
+    </div>
+    ${pode ? `<div class="gf"><button class="btn s" id="me-cancel">Cancelar</button><button class="btn p" id="me-ok">Salvar modelo</button></div>` : ""}`);
+  const pinta = () => {
+    $("#me-n", g).textContent = itens.length ? "· " + itens.length : "";
+    $("#me-itens", g).innerHTML = itens.map((t, i) => `<div class="row" style="grid-template-columns:24px 1fr auto;padding:6px 8px 6px 12px"><span style="color:var(--ink3);font-weight:700;font-size:12px">${i + 1}</span>
+      <input class="me-t" data-i="${i}" value="${esc(t)}" ${pode ? "" : "disabled"} style="border:0;background:none;padding:6px 4px;font-size:13.5px;min-width:0;outline:none">
+      ${pode ? `<span style="display:flex;gap:2px"><button class="ib mini" data-up="${i}" aria-label="Subir" ${i ? "" : "disabled"}>↑</button><button class="ib mini" data-dn="${i}" aria-label="Descer" ${i < itens.length - 1 ? "" : "disabled"}>↓</button><button class="ib mini" data-rm="${i}" aria-label="Remover">${I.lixo}</button></span>` : ""}</div>`).join("") || '<div class="vazio-g" style="padding:14px">Sem passos ainda.</div>';
+    $$(".me-t", g).forEach((inp) => (inp.oninput = () => (itens[+inp.dataset.i] = inp.value)));
+    $$("[data-up]", g).forEach((b) => (b.onclick = () => { const i = +b.dataset.up; [itens[i - 1], itens[i]] = [itens[i], itens[i - 1]]; pinta(); }));
+    $$("[data-dn]", g).forEach((b) => (b.onclick = () => { const i = +b.dataset.dn; [itens[i + 1], itens[i]] = [itens[i], itens[i + 1]]; pinta(); }));
+    $$("[data-rm]", g).forEach((b) => (b.onclick = () => { itens.splice(+b.dataset.rm, 1); pinta(); }));
+  };
+  pinta();
+  if (!pode) return;
+  const add = () => { const v = $("#me-item", g).value.trim(); if (v) { itens.push(v); $("#me-item", g).value = ""; pinta(); } $("#me-item", g).focus(); };
+  $("#me-add", g).onclick = add;
+  $("#me-item", g).onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } };
+  $("#me-cancel", g).onclick = () => fecharGaveta();
+  $("#me-ok", g).onclick = async () => {
+    const nome = $("#me-nome", g).value.trim();
+    if (!nome) { $("#me-nome", g).focus(); return toast("Informe o nome"); }
+    const num = (v) => (v === "" ? null : +v);
+    const reg = { nome, tipo: $("#me-tipo", g).value, departamento_id: +$("#me-dep", g).value || null, dias_meta: num($("#me-meta", g).value), dias_prazo: num($("#me-prazo", g).value),
+      ativo: $("#me-ativo", g).checked, checklist: itens.map((t) => t.trim()).filter(Boolean).map((t) => ({ texto: t })) };
+    const r = m ? await sb.from("modelos").update(reg).eq("id", m.id).select().single() : await sb.from("modelos").insert(reg).select().single();
+    if (r.error) return toast("Não salvou: " + r.error.message);
+    if (m) Object.assign(m, r.data); else st.todosModelos.push(r.data);
+    st.todosModelos.sort((a, b) => a.nome.localeCompare(b.nome));
+    st.modelos = [];
+    toast("Modelo salvo"); fecharGaveta(); depois();
+  };
+}
 
 // ---------------------------------------------------------------- teclado
 document.addEventListener("keydown", (e) => {
