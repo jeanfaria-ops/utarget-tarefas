@@ -493,3 +493,15 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .tg{display:inline-block;width:16px;color:var(--ink3)}
 .tb .sg b{display:block}
 .tb .sg .dif{display:block;font-size:11.5px;color:var(--atr-ink)}
+.mg-ab{display:grid;grid-template-columns:1.2fr 1fr;gap:24px;padding:6px 4px 10px}
+.mg-t{font-size:11px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;color:var(--ink3);margin-bottom:8px}
+.mg-l{display:grid;grid-template-columns:110px 1fr 90px 50px;gap:10px;align-items:center;font-size:12.5px;margin:5px 0}
+.mg-l .tr{height:8px;border-radius:4px;background:var(--sup3);overflow:hidden}
+.mg-l .tr i{display:block;height:100%;background:var(--c-ok)}
+.mg-l b{text-align:right;font-variant-numeric:tabular-nums}
+.mg-l small{color:var(--ink3);text-align:right}
+.mg-u{display:grid;grid-template-columns:110px 1fr auto;gap:10px;width:100%;text-align:left;padding:5px 6px;border-radius:8px;font-size:12.5px}
+.mg-u:hover{background:var(--sup3)}
+.mg-u small{color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb tr.un:hover td{background:none}
+@media (max-width:860px){ .mg-ab{grid-template-columns:1fr} .mg-l{grid-template-columns:90px 1fr 80px} .mg-l small{display:none} }
