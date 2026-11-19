@@ -63,6 +63,92 @@ Object.assign(I, {
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
 });
 
+
+// ---------------------------------------------------------------- camada de BI: gráficos em SVG/HTML (paleta validada, tooltips)
+const DEPS = ["Contábil", "DP", "BPO", "Legalização", "Fiscal"];
+const DEPC = { "Contábil": "var(--s1)", "DP": "var(--s2)", "BPO": "var(--s3)", "Legalização": "var(--s4)", "Fiscal": "var(--s5)" };
+const STC = { critico: "var(--c-atr)", atencao: "var(--c-risco)", ok: "var(--ok-ink)", sem_apontamento: "var(--s-neu)" };
+const kbrl = (v) => { const a = Math.abs(+v || 0), sg = v < 0 ? "−" : ""; return a >= 1000 ? `${sg}R$ ${(a / 1000).toLocaleString("pt-BR", { maximumFractionDigits: a >= 10000 ? 0 : 1 })} mil` : `${sg}R$ ${a.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`; };
+const legenda = (itens) => `<div class="leg2">${itens.map(([r, c, t]) => `<span>${t === "ln" ? `<i class="ln" style="border-color:${c}"></i>` : `<i style="background:${c}"></i>`}${esc(r)}</span>`).join("")}</div>`;
+const tipAttr = (html) => `data-tip="${esc(html)}"`;
+function ligaTips(root = document) { $$("[data-tip]", root).forEach((el) => { el.onmousemove = (e) => dica(e, el.dataset.tip); el.onmouseleave = () => dica(); }); }
+
+// cascata: [{rot, v (positivo = soma, negativo = subtrai), cor, total:true}]
+function vizCascata(passos, H = 250) {
+  const W = 680, pl = 8, pr = 8, pt = 26, pb = 40, n = passos.length, bw = (W - pl - pr) / n;
+  let acc = 0; const barras = passos.map((p) => { let y0, y1; if (p.total) { y0 = 0; y1 = p.v; acc = p.v; } else { y0 = acc; y1 = acc + p.v; acc = y1; } return { ...p, y0, y1 }; });
+  const mx = Math.max(...barras.map((b) => Math.max(b.y0, b.y1))), mn = Math.min(0, ...barras.map((b) => Math.min(b.y0, b.y1)));
+  const Y = (v) => pt + (H - pt - pb) * (1 - (v - mn) / (mx - mn || 1));
+  return `<svg class="viz" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cascata de resultado">
+    <line class="ax" x1="${pl}" x2="${W - pr}" y1="${Y(0)}" y2="${Y(0)}"/>
+    ${barras.map((b, i) => { const x = pl + i * bw + bw * 0.16, w = bw * 0.68, ya = Y(Math.max(b.y0, b.y1)), yb = Y(Math.min(b.y0, b.y1)), h = Math.max(2, yb - ya);
+      const lig = i < n - 1 ? `<line x1="${x + w}" x2="${x + bw}" y1="${Y(b.y1)}" y2="${Y(b.y1)}" stroke="var(--ink3)" stroke-width="1" stroke-dasharray="2 3"/>` : "";
+      return `<g ${tipAttr(`<div class="tt">${esc(b.rot)}</div>${tipLinha(b.cor, b.total ? "Valor" : b.v < 0 ? "Custo" : "Soma", brl(Math.abs(b.v)))}${b.sub ? `<div style="font-size:11.5px;color:var(--ink3);margin-top:4px">${esc(b.sub)}</div>` : ""}`)}>
+        <rect x="${x}" y="${ya}" width="${w}" height="${h}" rx="4" fill="${b.cor}"/>${lig}
+        <text class="vl" x="${x + w / 2}" y="${ya - 7}" text-anchor="middle">${b.total ? kbrl(b.v) : kbrl(b.v)}</text>
+        <text x="${x + w / 2}" y="${H - pb + 16}" text-anchor="middle">${esc(b.rot)}</text>
+        ${b.rot2 ? `<text x="${x + w / 2}" y="${H - pb + 30}" text-anchor="middle">${esc(b.rot2)}</text>` : ""}
+        <rect class="hit" x="${pl + i * bw}" y="${pt - 20}" width="${bw}" height="${H - pt - pb + 40}"/></g>`; }).join("")}
+  </svg>`;
+}
+
+// dispersão log × log com linhas de referência
+function vizDispersao(pts, { das = 11, alvo = 40, H = 330 } = {}) {
+  const W = 680, pl = 58, pr = 14, pt = 14, pb = 40;
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const lo = Math.pow(10, Math.floor(Math.log10(Math.max(50, Math.min(...xs, ...ys) * 0.8)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...xs, ...ys) * 1.15)));
+  const L = (v) => Math.log10(Math.max(v, lo)), X = (v) => pl + (W - pl - pr) * (L(v) - L(lo)) / (L(hi) - L(lo)), Y = (v) => pt + (H - pt - pb) * (1 - (L(v) - L(lo)) / (L(hi) - L(lo)));
+  const ticks = []; for (let t = lo; t <= hi; t *= 10) ticks.push(t);
+  const k1 = 1 - das / 100, k2 = k1 * (1 - alvo / 100);
+  const linha = (k, cor, rot) => { const x1 = lo, x2 = hi; const y1 = x1 * k, y2 = x2 * k; return `<line class="ref" x1="${X(x1)}" y1="${Y(y1)}" x2="${X(x2)}" y2="${Y(y2)}" stroke="${cor}"/><text x="${X(x2) - 4}" y="${Y(y2) + 14}" text-anchor="end" style="fill:${cor};font-weight:700">${rot}</text>`; };
+  const rmax = Math.max(...pts.map((p) => p.r || 1));
+  const ord = [...pts].sort((a, b) => (b.r || 0) - (a.r || 0));
+  const rot = new Set(ord.filter((p) => p.st === "critico").map((p) => p.id).concat([...pts].sort((a, b) => b.x - a.x).slice(0, 4).map((p) => p.id)));
+  return `<svg class="viz" viewBox="0 0 ${W} ${H}" role="img" aria-label="Honorário por custo de servir">
+    ${ticks.map((t) => `<line class="gr" x1="${X(t)}" x2="${X(t)}" y1="${pt}" y2="${H - pb}"/><line class="gr" x1="${pl}" x2="${W - pr}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${X(t)}" y="${H - pb + 16}" text-anchor="middle">${kbrl(t)}</text><text x="${pl - 8}" y="${Y(t) + 4}" text-anchor="end">${kbrl(t)}</text>`).join("")}
+    <text x="${(W + pl) / 2}" y="${H - 4}" text-anchor="middle" style="font-weight:600">Honorário mensal (escala log)</text>
+    <text transform="translate(12 ${(H - pb + pt) / 2}) rotate(-90)" text-anchor="middle" style="font-weight:600">Custo de servir</text>
+    ${linha(k1, "var(--c-atr)", "empate")}${linha(k2, "var(--ok-ink)", `margem ${alvo}%`)}
+    ${ord.map((p) => { const r = 4 + 12 * Math.sqrt((p.r || 0) / rmax); return `<g ${tipAttr(p.tip)} data-pt="${esc(p.id)}" style="cursor:pointer"><circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${r}" fill="${STC[p.st] || "var(--s-neu)"}" fill-opacity=".78" stroke="var(--sup)" stroke-width="2"/><circle class="hit" cx="${X(p.x)}" cy="${Y(p.y)}" r="${Math.max(r, 10)}"/>${rot.has(p.id) ? `<text class="vl" x="${X(p.x) + r + 4}" y="${Y(p.y) + 4}">${esc(p.id)}</text>` : ""}</g>`; }).join("")}
+  </svg>`;
+}
+
+// barras empilhadas horizontais com marcador
+function vizEmpilhadas(linhas, chaves, cores, { marcador = "marcador", fmt = kbrl } = {}) {
+  const mx = Math.max(1, ...linhas.map((l) => Math.max(l.total, l[marcador] || 0)));
+  return `<div class="sb">${linhas.map((l) => `<div class="sb-r" ${l.attr || ""}>
+      <span class="nm" title="${esc(l.rot)}">${esc(l.rot)}</span>
+      <span class="tr2">${chaves.filter((k) => l.partes[k] > 0).map((k) => `<i style="width:${(100 * l.partes[k]) / mx}%;background:${cores[k]}" ${tipAttr(`<div class="tt">${esc(l.rot)} · ${esc(k)}</div>${tipLinha(cores[k], k, brl(l.partes[k]))}${l.extra?.[k] ? `<div style="font-size:11.5px;color:var(--ink3);margin-top:4px">${esc(l.extra[k])}</div>` : ""}`)}></i>`).join("")}
+        ${l[marcador] ? `<span class="mk" style="left:${(100 * l[marcador]) / mx}%" ${tipAttr(`<div class="tt">${esc(l.rot)}</div>${tipLinha("var(--ink)", "Receita líquida", brl(l[marcador]))}`)}></span>` : ""}</span>
+      <span class="vv">${l.valor}<small>${l.valor2 || ""}</small></span></div>`).join("")}</div>`;
+}
+
+// barras horizontais simples ou em duas partes
+function vizBarras(linhas, { fmt = (v) => n0(v), max } = {}) {
+  const mx = max || Math.max(1, ...linhas.map((l) => (l.partes || [{ v: l.v }]).reduce((a, p) => a + p.v, 0)));
+  return `<div class="hb">${linhas.map((l) => { const ps = l.partes || [{ v: l.v, cor: l.cor || "var(--s1)", rot: l.rot }];
+    return `<div class="hb-r" ${l.attr || ""}><span class="nm" title="${esc(l.rot)}">${esc(l.rot)}</span><span class="tr2">${ps.filter((x) => x.v > 0).map((x) => `<i style="width:${(100 * x.v) / mx}%;background:${x.cor}" ${tipAttr(`<div class="tt">${esc(l.rot)}</div>${tipLinha(x.cor, x.rot || l.rot, fmt(x.v))}`)}></i>`).join("")}</span><span class="vv">${l.valor ?? fmt(ps.reduce((a, x) => a + x.v, 0))}</span></div>`; }).join("")}</div>`;
+}
+
+
+// colunas empilhadas (categorias no eixo x)
+function vizColunas(cols, chaves, cores, { H = 210, destaque } = {}) {
+  const W = 680, pl = 30, pr = 6, pt = 18, pb = 34, n = cols.length, bw = (W - pl - pr) / n;
+  const mx = Math.max(1, ...cols.map((c) => chaves.reduce((a, k) => a + (c.partes[k] || 0), 0)));
+  const Y = (v) => pt + (H - pt - pb) * (1 - v / mx), step = Math.max(1, Math.ceil(mx / 4));
+  const ticks = []; for (let t = 0; t <= mx; t += step) ticks.push(t);
+  return `<svg class="viz" viewBox="0 0 ${W} ${H}" role="img">
+    ${ticks.map((t) => `<line class="gr" x1="${pl}" x2="${W - pr}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${pl - 6}" y="${Y(t) + 4}" text-anchor="end">${t}</text>`).join("")}
+    ${cols.map((c, i) => { let acc = 0; const x = pl + i * bw + bw * 0.18, w = bw * 0.64, tot = chaves.reduce((a, k) => a + (c.partes[k] || 0), 0);
+      const segs = chaves.filter((k) => c.partes[k] > 0).map((k, j, arr) => { const y1 = Y(acc + c.partes[k]), y0 = Y(acc); acc += c.partes[k]; const top = j === arr.length - 1;
+        return `<rect x="${x}" y="${y1}" width="${w}" height="${Math.max(1, y0 - y1 - (j ? 2 : 0))}" ${top ? 'rx="4"' : ""} fill="${cores[k]}"/>${top ? `<rect x="${x}" y="${y1 + 4}" width="${w}" height="${Math.max(0, y0 - y1 - 4 - (j ? 2 : 0))}" fill="${cores[k]}"/>` : ""}`; }).join("");
+      return `<g ${tipAttr(`<div class="tt">${esc(c.tit || c.rot)}</div>${chaves.filter((k) => c.partes[k]).map((k) => tipLinha(cores[k], k, n0(c.partes[k]))).join("")}${c.lista ? `<div style="font-size:11.5px;color:var(--ink3);margin-top:4px;max-width:260px">${esc(c.lista)}</div>` : ""}`)}>${segs}
+        ${tot ? `<text class="vl" x="${x + w / 2}" y="${Y(tot) - 6}" text-anchor="middle">${tot}</text>` : ""}
+        <text x="${x + w / 2}" y="${H - pb + 16}" text-anchor="middle" style="${c.rot === destaque ? "font-weight:700;fill:var(--c-atr)" : ""}">${esc(c.rot)}</text>
+        <rect class="hit" x="${pl + i * bw}" y="${pt}" width="${bw}" height="${H - pt - pb}"/></g>`; }).join("")}
+  </svg>`;
+}
+
 // ---------------------------------------------------------------- INÍCIO: "Precisa de você" + pulso por módulo
 async function telaInicio() {
   const hoje = hojeISO();
@@ -192,6 +278,16 @@ async function fichaEntidade(id) {
 }
 
 // ---------------------------------------------------------------- LEGALIZAÇÃO
+function calLeg(d) {
+  const hoje = new Date(hojeISO() + "T12:00:00"), cols = [{ rot: "Vencidos", partes: {}, l: [] }];
+  for (let i = 0; i < 12; i++) { const m = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1); cols.push({ rot: MES[m.getMonth()] + (m.getMonth() === 0 || i === 0 ? "/" + String(m.getFullYear()).slice(2) : ""), ym: m.getFullYear() * 12 + m.getMonth(), partes: {}, l: [] }); }
+  const pos = (iso) => { if (!iso) return null; const t = new Date(iso + "T12:00:00"); if (iso < hojeISO()) return 0; const ym = t.getFullYear() * 12 + t.getMonth(); return cols.findIndex((c) => c.ym === ym); };
+  const add = (i, k, txt) => { if (i == null || i < 0) return; cols[i].partes[k] = (cols[i].partes[k] || 0) + 1; cols[i].l.push(txt); };
+  d.certificacoes.forEach((c) => add(pos(c.validade), "Certificação", `${c.sigla} ${c.tipo}`));
+  d.mandatos.forEach((m) => add(pos(m.fim), "Mandato", `${m.sigla} mandato`));
+  return cols.map((c) => ({ ...c, tit: c.rot === "Vencidos" ? "Já vencidos" : c.rot, lista: c.l.slice(0, 12).join(" · ") + (c.l.length > 12 ? ` +${c.l.length - 12}` : "") }));
+}
+
 async function telaLegalizacao() {
   cabecalho("Legalização", "Mandatos, certificações, certidões e bloqueios da carteira");
   carregandoView();
@@ -221,10 +317,13 @@ async function telaLegalizacao() {
       ${kpiM("Entidades com certidão positiva", ce.length, `${d.certidoes.reduce((a, c) => a + c.reconsultar, 0)} certidões a reconsultar`, ce.length ? "atr" : "ok")}
       ${kpiM("Bloqueios abertos", d.bloqueios.length, `${d.divergencias.length} divergências de cadastro`, d.bloqueios.length ? "risco" : "ok")}
     </div>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Calendário de vencimentos</h2><p>Certificações e mandatos de diretoria por mês de vencimento, nos próximos 12 meses.</p></div></div>
+      ${legenda([["Certificação", "var(--s1)"], ["Mandato", "var(--s2)"]])}${vizColunas(calLeg(d), ["Certificação", "Mandato"], { "Certificação": "var(--s1)", "Mandato": "var(--s2)" }, { destaque: "Vencidos" })}</section>
     <div class="card"><div class="sec-h"><div><h2>${{ cert: "Certificações", mand: "Mandatos de diretoria", cdao: "Certidões por entidade", bloq: "Bloqueios e divergências", fila: "Fila de emissão de certidões" }[aba]}</h2><p>Ordenado pelo que vence primeiro. Clique na linha para abrir a ficha.</p></div>
       ${segV("leg", [["cert", "Certificações"], ["mand", "Mandatos"], ["cdao", "Certidões"], ["bloq", "Bloqueios"], ["fila", `Fila (${d.fila.length})`]], aba)}</div>${corpo[aba]()}</div>`;
   $$("[data-seg=leg]").forEach((b) => (b.onclick = () => { st.abaLeg = b.dataset.k; telaLegalizacao(); }));
   ligaIr($("#view"));
+  ligaTips($("#view"));
 }
 
 // ---------------------------------------------------------------- CAPTAÇÃO
@@ -278,13 +377,22 @@ async function telaComercial() {
         l.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">${esc(x.deal)}<div style="font-size:11.5px;color:var(--ink3);font-weight:500">${esc(rotulo(x.origem))}</div></td><td>${pillSem(x.perdido_em ? "vencido" : x.contrato_em ? "ok" : x.aprovada_em ? "atencao" : "neu", rotulo(x.etapa))}</td><td class="n">${x.proposta_em ? dm(x.proposta_em) : "—"}</td><td class="n">${brl(x.valor_mensal)}</td><td class="n hm">${brl(x.valor_anual)}</td></tr>`))}</section>
       <section class="card"><div class="sec-h"><div><h2>Por origem</h2><p>Conversão por canal no ano.</p></div></div>${tabela([["Origem"], ["Propostas", "n"], ["Aprov.", "n"], ["Contratos", "n"], ["Aprovado/ano", "n hm"]],
         d.ganho.filter((g) => g.origem !== "TOTAL").map((g) => `<tr style="cursor:default"><td class="forte">${esc(rotulo(g.origem))}</td><td class="n">${g.propostas}</td><td class="n">${g.aprovadas}</td><td class="n">${g.contratos}</td><td class="n hm">${brl(g.valor_aprovado_ano)}</td></tr>`))}
-        <div class="leg" style="margin-top:14px">${[...porEtapa.entries()].map(([k, v]) => `<span>${esc(rotulo(k))} <b>${v}</b></span>`).join("")}</div></section>
+        <div class="sec-h" style="margin-top:18px"><div><h2>Funil por etapa</h2><p>Negócios e valor anual em cada etapa.</p></div></div>
+        ${vizBarras([...porEtapa.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ rot: rotulo(k), v, cor: k === "perdido" ? "var(--s-neu)" : k === "contrato" || k === "contratado" ? "var(--ok-ink)" : "var(--s1)",
+          valor: `${v} · ${kbrl(d.deals.filter((x) => (x.etapa || "—") === k).reduce((a, x) => a + (+x.valor_anual || 0), 0))}` })))}</section>
     </div>
     <div style="color:var(--ink3);font-size:12.5px;margin:4px">Lead e contato vivem no Brevo; aqui só o espelho para acompanhar. Atividades de pré-venda viram tarefa do departamento Comercial.</div>`;
   ligaIr($("#view"));
+  ligaTips($("#view"));
 }
 
 // ---------------------------------------------------------------- ATENDIMENTO
+function idadeFila(ab) {
+  const b = [["< 4h", 4], ["4–24h", 24], ["1–3 dias", 72], ["3–7 dias", 168], ["7–30 dias", 720], ["> 30 dias", 1e9]].map(([rot, lim]) => ({ rot, lim, partes: { Atendimentos: 0 } }));
+  ab.forEach((x) => { const h = x.ultima_msg_em ? (Date.now() - new Date(x.ultima_msg_em)) / 36e5 : 1e8; b.find((k) => h < k.lim).partes.Atendimentos++; });
+  return b;
+}
+
 async function telaAtendimento() {
   cabecalho("Atendimento", "WhatsApp da Utarget (ZapContábil)");
   carregandoView();
@@ -299,6 +407,13 @@ async function telaAtendimento() {
       ${kpiM("Atendimentos em 30 dias", t30, "todos os setores")}
       ${kpiM("Espelho atualizado", quando(d.coletado_em), "fonte: ZapContábil")}
     </div>
+    <div class="bi-r c2b">
+      <section class="card"><div class="sec-h"><div><h2>Fila por setor</h2><p>Abertos agora; em vermelho, os parados há mais de 24h.</p></div></div>
+        ${legenda([["Parado há mais de 24h", "var(--c-atr)"], ["Movimentado nas últimas 24h", "var(--s1)"]])}
+        ${vizBarras(d.setores.filter((x) => x.abertos).map((x) => ({ rot: String(x.setor).replace(/^\S+\s/, ""), valor: x.abertos, partes: [{ v: x.parados_24h, cor: "var(--c-atr)", rot: "Parados > 24h" }, { v: x.abertos - x.parados_24h, cor: "var(--s1)", rot: "Recentes" }] })))}</section>
+      <section class="card"><div class="sec-h"><div><h2>Há quanto tempo a conversa está parada</h2><p>Atendimentos abertos pela idade da última mensagem.</p></div></div>
+        ${vizColunas(idadeFila(d.abertos), ["Atendimentos"], { "Atendimentos": "var(--s1)" }, { H: 200 })}</section>
+    </div>
     <div class="grade">
       <section class="card"><div class="sec-h"><div><h2>Abertos, do mais parado ao mais recente</h2><p>Responder e transferir continua no ZapContábil.</p></div></div>${tabela([["Ticket"], ["Setor"], ["Cliente"], ["Atendente", "hm"], ["Parado", "n"]],
         l.map((x) => { const h = horas(x.ultima_msg_em); return `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">#${esc(x.ticket_id)}</td><td style="font-size:12.5px">${esc(String(x.setor).replace(/^\S+\s/, ""))}</td><td>${esc(x.sigla || "—")}</td><td class="hm">${esc(curto(x.atendente || "—"))}</td><td class="n">${h == null ? "—" : `<span class="pill ${h > 24 ? "atr" : h > 4 ? "risco" : "ok"}">${h < 48 ? h + "h" : Math.round(h / 24) + "d"}</span>`}</td></tr>`; }), "Nenhum atendimento aberto.")}</section>
@@ -310,6 +425,7 @@ async function telaAtendimento() {
       </div>
     </div>`;
   ligaIr($("#view"));
+  ligaTips($("#view"));
 }
 
 // ---------------------------------------------------------------- FINANCEIRO
@@ -377,19 +493,40 @@ async function telaMargem() {
         <div><div class="mg-t">CNPJs do grupo</div>${(x.unidades || []).map((u) => `<button class="mg-u" ${u.entidade_id ? `data-ent="${u.entidade_id}"` : ""}><span>${esc(u.sigla || "—")}</span><small>${esc(u.cliente || "")}</small><b>${brl(u.honorario)}</b></button>`).join("")}</div>
       </div></td></tr>` : ""}`;
   };
+  const resOp = recTot - custoTot;
+  const depOrd = DEPS.map((k) => d.departamentos.find((x) => x.departamento === k)).filter(Boolean);
+  const cascata = [{ rot: "Receita", rot2: "líquida", v: recTot, total: true, cor: "var(--c-ok)", sub: "Honorários menos DAS" }]
+    .concat(depOrd.map((k) => ({ rot: k.departamento, rot2: `${n0(k.horas_apontadas)}h`, v: -k.custo_direto, cor: DEPC[k.departamento], sub: `Custo direto de quem produz · R$ ${n1(k.custo_direto_hora)}/h` })))
+    .concat([{ rot: "Comum", rot2: "estrutura", v: -dep0.custo_comum_total, cor: "var(--s-neu)", sub: "Sistemas, ocupação, gestão, financeiro, encargos e mentoria" },
+             { rot: "Resultado", rot2: "operação", v: resOp, total: true, cor: resOp < 0 ? "var(--c-atr)" : "var(--ok-ink)" }]);
+  const pts = comHoras.map((x) => ({ id: x.grupo, x: +x.honorario, y: +x.custo_total, r: +x.horas || 1, st: x.status,
+    tip: `<div class="tt">${esc(x.grupo)}${x.cnpjs > 1 ? ` · ${x.cnpjs} CNPJs` : ""}</div>${tipLinha("var(--c-ok)", "Honorário", brl(x.honorario))}${tipLinha(STC[x.status], "Custo de servir", brl(x.custo_total))}${tipLinha("var(--ink)", "Resultado", brl(x.resultado))}<div style="font-size:11.5px;color:var(--ink3);margin-top:4px">${n1(x.horas)}h · margem ${n1(x.margem_pct)}% · clique para a análise</div>` }));
+  const topG = [...comHoras].sort((a, b) => b.custo_total - a.custo_total).slice(0, 10).map((x) => {
+    const partes = {}; const extra = {}; (x.deptos || []).forEach((k) => { partes[k.departamento] = +k.custo; extra[k.departamento] = `${n1(k.horas)}h · ${n0(k.pct)}% do custo do grupo`; });
+    return { rot: x.grupo, partes, extra, total: +x.custo_total, marcador: +x.receita_liquida, valor: `<span class="${x.resultado < 0 ? "t-atr" : ""}">${kbrl(x.resultado)}</span>`, valor2: `margem ${n0(x.margem_pct)}%`, attr: `data-mgg="${esc(x.grupo)}"` };
+  });
   $("#view").innerHTML = `
-    <div class="kpis">
-      ${kpiM("Resultado da operação", brl(recTot - custoTot), `receita líquida ${brl(recTot)} − custo de servir ${brl(custoTot)} · ${brl(semDono)} em horas fora dos grupos`, recTot - custoTot < 0 ? "atr" : "ok")}
-      ${kpiM("Grupos no prejuízo", neg.length, neg.slice(0, 3).map((x) => x.grupo).join(", ") || "nenhum", neg.length ? "atr" : "ok")}
-      ${kpiM("Abaixo da margem-alvo", comHoras.filter((x) => x.status === "atencao").length, "positivos, mas abaixo de 40%", "risco")}
-      ${kpiM("Custo comum por hora", brl(dep0.custo_comum_hora), `estrutura e gestão: ${brl(dep0.custo_comum_total)}/mês`)}
-      ${kpiM("Sem apontamento", d.grupos.filter((x) => x.resultado == null).length, "grupos sem horas na competência", "risco")}
+    <section class="card" style="margin-bottom:16px"><div class="hero">
+      <div class="hero-n"><span class="rot">Resultado da operação · ${comp(r.competencia_horas)}</span>
+        <span class="num ${resOp < 0 ? "t-atr" : ""}">${kbrl(resOp)}</span>
+        <span class="sub">Margem de <b>${n1((100 * resOp) / (recTot || 1))}%</b> sobre a receita líquida de <b>${brl(recTot)}</b>.<br>
+          <b>${neg.length}</b> ${neg.length === 1 ? "grupo dá" : "grupos dão"} prejuízo${neg.length ? ` (${neg.slice(0, 3).map((x) => esc(x.grupo)).join(", ")})` : ""}.<br>
+          <b>${brl(semDono)}</b> do custo está em horas de clientes sem contrato ativo no banco.</span></div>
+      <div>${vizCascata(cascata)}</div></div></section>
+    <div class="bi-r c2">
+      <section class="card"><div class="sec-h"><div><h2>Honorário × custo de servir</h2><p>Cada bolha é um grupo econômico; o tamanho é o número de horas. Acima da linha vermelha, o grupo dá prejuízo.</p></div></div>
+        ${legenda([["Prejuízo", STC.critico], ["Abaixo de 40%", STC.atencao], ["Margem saudável", STC.ok], ["Empate", "var(--c-atr)", "ln"], ["Margem-alvo 40%", "var(--ok-ink)", "ln"]])}
+        ${vizDispersao(pts, { das: 11, alvo: 40 })}</section>
+      <section class="card"><div class="sec-h"><div><h2>Custo-hora por departamento</h2><p>Custo direto de quem produz + parcela do custo comum por hora.</p></div></div>
+        ${legenda([["Direto do departamento", "var(--s1)"], ["Custo comum", "var(--s-neu)"]])}
+        ${vizBarras(depOrd.sort((a, b) => b.custo_hora - a.custo_hora).map((k) => ({ rot: k.departamento, valor: `R$ ${n0(k.custo_hora)}`,
+          partes: [{ v: +k.custo_direto_hora, cor: DEPC[k.departamento], rot: "Direto" }, { v: +k.custo_comum_hora, cor: "var(--s-neu)", rot: "Comum" }] })), { fmt: (v) => "R$ " + n1(v) + "/h" })}
+        <div class="tbw" style="margin-top:14px">${tabela([["Departamento"], ["Horas", "n"], ["Custo direto", "n"], ["Custo-hora", "n"]],
+          d.departamentos.map((k) => `<tr style="cursor:default"><td class="forte">${esc(k.departamento)}</td><td class="n">${n1(k.horas_apontadas)}</td><td class="n">${brl(k.custo_direto)}</td><td class="n"><b>R$ ${(+k.custo_hora).toFixed(2).replace(".", ",")}</b></td></tr>`))}</div></section>
     </div>
-    <div class="grade" style="grid-template-columns:1fr">
-      <section class="card"><div class="sec-h"><div><h2>Custo-hora por departamento</h2><p>Custo direto de quem produz no departamento ÷ horas apontadas, mais o custo comum por hora direta.</p></div></div>
-        ${tabela([["Departamento"], ["Horas apontadas", "n"], ["Custo direto", "n hm"], ["Direto/h", "n"], ["Comum/h", "n hm"], ["Custo-hora", "n"]],
-          d.departamentos.map((k) => `<tr style="cursor:default"><td class="forte">${esc(k.departamento)}</td><td class="n">${n1(k.horas_apontadas)}</td><td class="n hm">${brl(k.custo_direto)}</td><td class="n">R$ ${n1(k.custo_direto_hora)}</td><td class="n hm">R$ ${n1(k.custo_comum_hora)}</td><td class="n"><b>R$ ${(+k.custo_hora).toFixed(2).replace(".", ",")}</b></td></tr>`))}</section>
-    </div>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Onde está o custo dos maiores grupos</h2><p>Custo por departamento; o traço preto é a receita líquida. Barra que passa do traço é prejuízo. Clique para a análise.</p></div></div>
+      ${legenda(DEPS.map((k) => [k, DEPC[k]]).concat([["Receita líquida", "var(--ink)", "ln"]]))}
+      ${vizEmpilhadas(topG, DEPS, DEPC)}</section>
     <div class="card" style="padding:4px 8px">
       <div class="sec-h" style="padding:12px 8px 4px"><div><h2>${modo === "grupo" ? "Grupos econômicos" : "Por CNPJ"}</h2><p>${modo === "grupo" ? "Do pior resultado ao melhor. Clique na linha para abrir; na situação, para a análise completa." : "Cada CNPJ com as horas lançadas nele. Clique na situação para a análise do CNPJ."}</p></div>
         ${segV("mg", [["grupo", "Por grupo"], ["cnpj", "Por CNPJ"]], modo)}</div>
@@ -404,6 +541,8 @@ async function telaMargem() {
   $$("[data-seg=mg]").forEach((b) => (b.onclick = () => { st.margemModo = b.dataset.k; telaMargem(); }));
   ligaIr($("#view"));
   $$("[data-mgg]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); analiseMargem({ p_grupo: b.dataset.mgg }); }));
+  $$("[data-pt]").forEach((b) => (b.onclick = () => analiseMargem({ p_grupo: b.dataset.pt })));
+  ligaTips($("#view"));
   $$("[data-mge]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); analiseMargem({ p_entidade: b.dataset.mge }); }));
 }
 
@@ -433,11 +572,101 @@ async function analiseMargem(args) {
       <div style="font-size:12px;color:var(--ink3);margin-top:6px">Unidades sem horas costumam ter o trabalho lançado na matriz; o resultado que vale é o do grupo.</div>`) : "") +
     bloco("Sinais de atendimento (90 dias)", `<div class="am-g">${kv("Atendimentos WhatsApp", n0(s.tickets_90d))}${kv("Mensagens da Utarget", n0(s.msgs_utarget_90d))}${kv("1ª resposta (mediana)", s.resp_mediana_min == null ? "—" : n0(s.resp_mediana_min) + " min")}${kv("Tarefas abertas no G-Click", n0(s.gc_abertas))}${kv("Atrasadas", n0(s.gc_atrasadas), s.gc_atrasadas ? "t-atr" : "")}${kv("Entregues com atraso", n0(s.gc_entregues_atraso_90d))}</div>`);
   $(".gf", g)?.remove();
-  g.insertAdjacentHTML("beforeend", `<div class="gf">${!grupo && d.entidade_id ? `<button class="btn s" id="am-ficha">Abrir ficha da entidade</button>` : ""}${!grupo && d.cnpjs?.[0]?.grupo && d.cnpjs[0].grupo !== d.nome ? `<button class="btn s" id="am-grupo">Ver o grupo ${esc(d.cnpjs[0].grupo)}</button>` : ""}<button class="btn p" id="am-ok">Fechar</button></div>`);
+  g.insertAdjacentHTML("beforeend", `<div class="gf" style="flex-wrap:wrap"><label class="am-chk"><input type="checkbox" id="am-mg" checked> Incluir margem do escritório</label><button class="btn s" id="am-pdf">Relatório para o cliente (PDF)</button>${!grupo && d.entidade_id ? `<button class="btn s" id="am-ficha">Abrir ficha da entidade</button>` : ""}${!grupo && d.cnpjs?.[0]?.grupo && d.cnpjs[0].grupo !== d.nome ? `<button class="btn s" id="am-grupo">Ver o grupo ${esc(d.cnpjs[0].grupo)}</button>` : ""}<button class="btn p" id="am-ok">Fechar</button></div>`);
   $("#am-ok", g).onclick = () => fecharGaveta();
+  $("#am-pdf", g).onclick = () => relatorioCliente(d, { margem: $("#am-mg", g).checked });
   if ($("#am-ficha", g)) $("#am-ficha", g).onclick = () => fichaEntidade(d.entidade_id);
   if ($("#am-grupo", g)) $("#am-grupo", g).onclick = () => analiseMargem({ p_grupo: d.cnpjs[0].grupo });
   $$("[data-amc]", g).forEach((t) => (t.onclick = () => analiseMargem({ p_entidade: t.dataset.amc })));
+}
+
+
+// relatório imprimível para o cliente (marca Utarget, A4)
+function relatorioCliente(d, { margem = true } = {}) {
+  const r = d.resultado || {}, s = d.sinais || {}, grupo = d.tipo === "grupo";
+  const hojeBR = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "long", year: "numeric" });
+  const mesRef = new Date(String(d.competencia).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const cnpjFmt = (c) => (c && c.length === 14 ? c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : c || "");
+  const R = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }));
+  const H1 = (v) => Number(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  const CORES = { "Contábil": "#2a78d6", "DP": "#eb6834", "BPO": "#1baf7a", "Legalização": "#eda100", "Fiscal": "#e87ba4" };
+  const NOME = { "Contábil": "Contabilidade", "DP": "Departamento Pessoal", "BPO": "BPO Financeiro", "Legalização": "Legalização e certificações", "Fiscal": "Fiscal" };
+  const totH = r.horas || 0, totC = r.custo || 0;
+  // empresas
+  const emp = new Map();
+  (d.empresas || []).forEach((e) => emp.set(e.entidade_id, { ...e, horas: 0, custo: 0, deps: {} }));
+  (d.matriz || []).forEach((m) => { const e = emp.get(m.entidade_id) || { entidade_id: m.entidade_id, sigla: m.sigla, nome: m.nome, cnpj: m.cnpj, horas: 0, custo: 0, deps: {} }; e.horas += +m.horas; e.custo += +m.custo; e.deps[m.departamento] = (e.deps[m.departamento] || 0) + +m.horas; emp.set(m.entidade_id, e); });
+  (d.cnpjs || []).forEach((c) => { const e = emp.get(c.entidade_id); if (e) e.honorario = +c.honorario; });
+  const lista = [...emp.values()].sort((a, b) => b.horas - a.horas);
+  const maxH = Math.max(1, ...lista.map((e) => e.horas));
+  const top = lista[0], dep0 = (d.departamentos || [])[0];
+  const cobre = totC ? Math.round((100 * r.honorario) / (totC / (1 - (r.das_pct || 11) / 100))) : null;
+  const barra = (deps, total, larg) => `<div class="bar" style="width:${larg}%">${DEPS.filter((k) => deps[k] > 0).map((k) => `<i style="flex:${deps[k]};background:${CORES[k]}" title="${NOME[k]}: ${H1(deps[k])}h"></i>`).join("")}</div>`;
+  const leitura = [
+    top && totH ? `<b>${Math.round((100 * top.horas) / totH)}%</b> do trabalho do mês foi para <b>${esc(top.sigla || top.nome)}</b>.` : "",
+    dep0 ? `<b>${esc(NOME[dep0.departamento] || dep0.departamento)}</b> concentra <b>${Math.round(dep0.pct)}%</b> do esforço da equipe.` : "",
+    grupo && lista.filter((e) => !e.horas).length ? `${lista.filter((e) => !e.horas).length} ${lista.filter((e) => !e.horas).length === 1 ? "empresa não teve" : "empresas não tiveram"} horas lançadas diretamente: o trabalho delas foi registrado na matriz.` : "",
+    margem && r.margem_pct != null ? (r.resultado < 0 ? `O honorário atual cobre cerca de <b>${cobre}%</b> do custo do trabalho entregue; a diferença hoje é absorvida pela Utarget.` : `O honorário cobre o trabalho entregue e deixa margem de <b>${H1(r.margem_pct)}%</b> para o escritório.`) : "",
+  ].filter(Boolean);
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relatório de consumo — ${esc(d.nome)} — ${esc(mesRef)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--azul:#0071D4;--laranja:#FF9100;--grafite:#404040;--ink:#16202C;--ink2:#4A5563;--ink3:#6E7988;--linha:#E2E7EE;--fundo:#F3F5F8}
+*{box-sizing:border-box}html,body{margin:0;background:#E9EDF2;color:var(--ink);font-family:Montserrat,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pg{width:210mm;min-height:297mm;margin:16px auto;background:#fff;padding:16mm 15mm 14mm;position:relative;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+.bar-top{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid var(--azul);padding-bottom:10px}
+.bar-top img{height:34px}.bar-top .dt{text-align:right;font-size:10px;color:var(--ink3);line-height:1.5}
+h1{font-size:22px;font-weight:800;margin:18px 0 2px;letter-spacing:-.3px}h1 span{color:var(--azul)}
+.sub{font-size:11.5px;color:var(--ink2);margin:0 0 16px}
+.kp{display:grid;grid-template-columns:repeat(${margem ? 4 : 3},1fr);gap:8px;margin-bottom:16px}
+.k{background:var(--fundo);border-radius:10px;padding:10px 12px}.k .r{font-size:9.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3)}
+.k .v{font-size:20px;font-weight:800;margin-top:3px;letter-spacing:-.4px}.k .s{font-size:9.5px;color:var(--ink3);margin-top:2px}
+.k.dest{background:var(--azul);color:#fff}.k.dest .r,.k.dest .s{color:rgba(255,255,255,.85)}
+.k.neg .v{color:#C5221F}
+h2{font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--grafite);margin:18px 0 8px;border-left:4px solid var(--laranja);padding-left:8px}
+.dl{display:grid;gap:6px}.dl .l{display:grid;grid-template-columns:150px 1fr 90px;gap:10px;align-items:center;font-size:11px}
+.dl .t{height:12px;background:var(--fundo);border-radius:4px;overflow:hidden}.dl .t i{display:block;height:100%;border-radius:4px}
+.dl .n{text-align:right;font-weight:700}.dl .n small{font-weight:500;color:var(--ink3)}
+table{width:100%;border-collapse:collapse;font-size:10.5px}th{text-align:left;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3);font-weight:700;border-bottom:1.5px solid var(--grafite);padding:6px 5px}
+td{border-bottom:1px solid var(--linha);padding:6px 5px;vertical-align:middle}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
+.bar{display:flex;gap:1.5px;height:9px;min-width:2px}.bar i{display:block;height:100%}.bar i:first-child{border-radius:3px 0 0 3px}.bar i:last-child{border-radius:0 3px 3px 0}
+.leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:9.5px;color:var(--ink2);margin:0 0 8px}.leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.box{background:#EAF3FC;border-radius:10px;padding:10px 14px;font-size:11.5px;line-height:1.6}.box p{margin:2px 0}
+.neg{color:#C5221F}.pos{color:#137333}
+.met{font-size:9px;color:var(--ink3);line-height:1.5;margin-top:14px}
+.rod{position:absolute;left:15mm;right:15mm;bottom:9mm;display:flex;justify-content:space-between;font-size:9px;color:var(--ink3);border-top:1px solid var(--linha);padding-top:6px}
+.acoes{position:fixed;top:12px;right:16px;display:flex;gap:8px}.acoes button{font:700 13px Montserrat,sans-serif;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--azul);color:#fff}.acoes button.s{background:#fff;color:var(--ink);border:1px solid var(--linha)}
+@page{size:A4;margin:0}@media print{body{background:#fff}.pg{margin:0;box-shadow:none}.acoes{display:none}}
+</style></head><body>
+<div class="acoes"><button onclick="print()">Salvar em PDF / imprimir</button><button class="s" onclick="close()">Fechar</button></div>
+<div class="pg">
+  <div class="bar-top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/, "")}logo-claro.svg" alt="Utarget Contabilidade & Assessoria"><div class="dt">Emitido em ${hojeBR}<br>Competência: ${mesRef}</div></div>
+  <h1>Relatório de consumo de serviços<br><span>${esc(d.nome)}</span></h1>
+  <p class="sub">${grupo ? `${lista.length} empresas do grupo atendidas pela Utarget` : esc(lista[0]?.nome || "")}${!grupo && lista[0]?.cnpj ? " · CNPJ " + cnpjFmt(lista[0].cnpj) : ""}</p>
+  <div class="kp">
+    <div class="k"><div class="r">Honorário mensal</div><div class="v">${R(r.honorario)}</div><div class="s">${grupo ? "soma das empresas" : "contrato vigente"}</div></div>
+    <div class="k"><div class="r">Horas de trabalho</div><div class="v">${H1(totH)} h</div><div class="s">lançadas pela equipe no mês</div></div>
+    <div class="k ${margem ? "" : "dest"}"><div class="r">Valor do trabalho entregue</div><div class="v">${R(totC)}</div><div class="s">horas × custo-hora de cada área</div></div>
+    ${margem ? `<div class="k dest ${r.resultado < 0 ? "" : ""}"><div class="r">Margem para o escritório</div><div class="v">${r.margem_pct == null ? "—" : H1(r.margem_pct) + "%"}</div><div class="s">${r.resultado == null ? "" : (r.resultado < 0 ? "déficit de " : "resultado de ") + R(Math.abs(r.resultado)) + " no mês"}</div></div>` : ""}
+  </div>
+  <h2>Onde o trabalho se concentra</h2>
+  <div class="dl">${(d.departamentos || []).map((k) => `<div class="l"><span>${esc(NOME[k.departamento] || k.departamento)}</span><span class="t"><i style="width:${k.pct}%;background:${CORES[k.departamento] || "#999"}"></i></span><span class="n">${H1(k.horas)} h <small>· ${Math.round(k.pct)}%</small></span></div>`).join("")}</div>
+  <h2>Consumo por empresa</h2>
+  <div class="leg">${DEPS.filter((k) => (d.departamentos || []).some((x) => x.departamento === k)).map((k) => `<span><i style="background:${CORES[k]}"></i>${NOME[k]}</span>`).join("")}</div>
+  <table><thead><tr><th>Empresa</th><th class="n">Honorário</th><th class="n">Horas</th><th style="width:30%">Distribuição do trabalho</th><th class="n">% do grupo</th>${margem ? '<th class="n">Valor do trabalho</th>' : ""}</tr></thead><tbody>
+  ${lista.map((e) => `<tr><td><b>${esc(e.sigla || "—")}</b><small>${esc(e.nome || "")}${e.cnpj ? " · " + cnpjFmt(e.cnpj) : ""}</small></td><td class="n">${e.honorario ? R(e.honorario) : "—"}</td><td class="n">${e.horas ? H1(e.horas) : "—"}</td>
+    <td>${e.horas ? barra(e.deps, e.horas, Math.max(4, (100 * e.horas) / maxH)) : '<small>registrado na matriz</small>'}</td><td class="n">${totH && e.horas ? Math.round((100 * e.horas) / totH) + "%" : "—"}</td>${margem ? `<td class="n">${e.custo ? R(e.custo) : "—"}</td>` : ""}</tr>`).join("")}
+  </tbody></table>
+  <h2>Leitura do mês</h2>
+  <div class="box">${leitura.map((t) => `<p>${t}</p>`).join("")}${s.tickets_90d ? `<p>Nos últimos 90 dias foram <b>${s.tickets_90d}</b> atendimentos pelo WhatsApp${s.resp_mediana_min != null ? `, com primeira resposta em <b>${Math.round(s.resp_mediana_min)} min</b> (mediana)` : ""}.</p>` : ""}</div>
+  <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do trabalho multiplica as horas pelo custo-hora de cada área, que inclui a equipe, encargos, benefícios e a estrutura do escritório. ${margem ? "A margem é a diferença entre o honorário, líquido do Simples Nacional, e o valor do trabalho entregue. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
+  <div class="rod"><span>Utarget Contabilidade &amp; Assessoria · especializada no Terceiro Setor desde 2016</span><span>WhatsApp (11) 2642-8636 · utarget.com.br</span></div>
+</div></body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) return toast("Libere pop-ups para abrir o relatório");
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 // ---------------------------------------------------------------- ACESSOS (admin)
