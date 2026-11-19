@@ -353,6 +353,9 @@ async function telaMargem() {
   let d; try { d = await rpcMod("app_mod_margem"); } catch (e) { return erroView(e); }
   const r = d.resumo || {}; const pc = d.parametros_custo || {};
   const abertos = st.margemAbertos || (st.margemAbertos = new Set());
+  const modo = st.margemModo || (st.margemModo = "grupo");
+  let cnpjs = [];
+  if (modo === "cnpj") { try { cnpjs = await rpcMod("app_mod_margem_cnpj"); } catch (e) { return erroView(e); } }
   const gs = d.grupos.filter((x) => casa(x, ["grupo", "status"]) || (x.unidades || []).some((u) => casa(u, ["sigla", "cliente"])));
   const comHoras = d.grupos.filter((x) => x.resultado != null);
   const res = comHoras.reduce((a, x) => a + +x.resultado, 0), neg = comHoras.filter((x) => x.resultado < 0);
@@ -368,7 +371,7 @@ async function telaMargem() {
       <td class="n">${brl(x.honorario)}</td><td class="n">${x.custo_total == null ? "—" : brl(x.custo_total)}</td>
       <td class="n">${x.resultado == null ? "—" : `<span class="${x.resultado < 0 ? "t-atr" : ""}">${brl(x.resultado)}</span>`}</td><td class="n">${mg(x.margem_pct)}</td>
       <td class="hm">${top ? `<b style="font-size:12.5px">${esc(top.departamento)}</b> <small style="color:var(--ink3)">${n1(top.horas)}h · ${n0(top.pct)}% do custo</small>` : '<span style="color:var(--ink3)">sem apontamento</span>'}</td>
-      <td>${pillSem(x.status)}</td></tr>
+      <td><button class="st-b" data-mgg="${esc(x.grupo)}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button></td></tr>
       ${ab ? `<tr class="un"><td colspan="7"><div class="mg-ab">
         <div><div class="mg-t">Custo por departamento</div>${(x.deptos || []).map((k) => `<div class="mg-l"><span>${esc(k.departamento)}</span><span class="tr"><i style="width:${k.pct}%"></i></span><b>${brl(k.custo)}</b><small>${n1(k.horas)}h</small></div>`).join("") || '<div style="color:var(--ink3);font-size:12.5px">Sem horas apontadas na competência.</div>'}</div>
         <div><div class="mg-t">CNPJs do grupo</div>${(x.unidades || []).map((u) => `<button class="mg-u" ${u.entidade_id ? `data-ent="${u.entidade_id}"` : ""}><span>${esc(u.sigla || "—")}</span><small>${esc(u.cliente || "")}</small><b>${brl(u.honorario)}</b></button>`).join("")}</div>
@@ -388,11 +391,53 @@ async function telaMargem() {
           d.departamentos.map((k) => `<tr style="cursor:default"><td class="forte">${esc(k.departamento)}</td><td class="n">${n1(k.horas_apontadas)}</td><td class="n hm">${brl(k.custo_direto)}</td><td class="n">R$ ${n1(k.custo_direto_hora)}</td><td class="n hm">R$ ${n1(k.custo_comum_hora)}</td><td class="n"><b>R$ ${(+k.custo_hora).toFixed(2).replace(".", ",")}</b></td></tr>`))}</section>
     </div>
     <div class="card" style="padding:4px 8px">
-      <div class="sec-h" style="padding:12px 8px 4px"><div><h2>Grupos econômicos</h2><p>Do pior resultado ao melhor. Clique para abrir o custo por departamento e os CNPJs.</p></div></div>
-      ${tabela([["Grupo"], ["Honorário", "n"], ["Custo", "n"], ["Resultado", "n"], ["Margem", "n"], ["Departamento que mais pesa", "hm"], ["Situação"]], gs.map(linha))}</div>
+      <div class="sec-h" style="padding:12px 8px 4px"><div><h2>${modo === "grupo" ? "Grupos econômicos" : "Por CNPJ"}</h2><p>${modo === "grupo" ? "Do pior resultado ao melhor. Clique na linha para abrir; na situação, para a análise completa." : "Cada CNPJ com as horas lançadas nele. Clique na situação para a análise do CNPJ."}</p></div>
+        ${segV("mg", [["grupo", "Por grupo"], ["cnpj", "Por CNPJ"]], modo)}</div>
+      ${modo === "grupo" ? tabela([["Grupo"], ["Honorário", "n"], ["Custo", "n"], ["Resultado", "n"], ["Margem", "n"], ["Departamento que mais pesa", "hm"], ["Situação"]], gs.map(linha))
+        : tabela([["CNPJ"], ["Honorário", "n"], ["Horas", "n hm"], ["Custo", "n"], ["Resultado", "n"], ["Margem", "n"], ["Situação"]],
+          cnpjs.filter((x) => casa(x, ["sigla", "cliente", "grupo"])).map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : ""}><td class="cl-c"><b>${esc(x.sigla || "—")}</b><small>${esc(x.cliente || "")}${x.grupo && x.grupo !== x.sigla ? " · grupo " + esc(x.grupo) : ""}</small></td>
+            <td class="n">${brl(x.honorario)}</td><td class="n hm">${x.horas == null ? "—" : n1(x.horas)}</td><td class="n">${x.custo == null ? "—" : brl(x.custo)}</td>
+            <td class="n">${x.custo == null ? "—" : `<span class="${x.resultado < 0 ? "t-atr" : ""}">${brl(x.resultado)}</span>`}</td><td class="n">${mg(x.margem_pct)}</td>
+            <td><button class="st-b" data-mge="${x.entidade_id}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button></td></tr>`))}</div>
     <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo inclui pró-labore da Cris e remuneração do Jean (decisão de 19/11/2026), encargos reais (FGTS e INSS), benefícios, provisão de 13º e férias, estrutura (sistemas, ocupação, CRC, mentoria em 12 meses). Aquisição de clientes e despesas pessoais dos sócios ficam fora. Horas em clientes sem contrato ativo não entram em nenhum grupo.</div>`;
   $$("tr.gr").forEach((t) => (t.onclick = () => { const g = t.dataset.g; abertos.has(g) ? abertos.delete(g) : abertos.add(g); telaMargem(); }));
+  $$("[data-seg=mg]").forEach((b) => (b.onclick = () => { st.margemModo = b.dataset.k; telaMargem(); }));
   ligaIr($("#view"));
+  $$("[data-mgg]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); analiseMargem({ p_grupo: b.dataset.mgg }); }));
+  $$("[data-mge]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); analiseMargem({ p_entidade: b.dataset.mge }); }));
+}
+
+// análise de rentabilidade (gaveta) de um grupo ou de um CNPJ
+async function analiseMargem(args) {
+  const g = gaveta(`<div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Análise de rentabilidade</div><h3>Carregando…</h3></div><div class="gb"><div class="sk" style="height:420px"></div></div>`);
+  let d; try { d = await rpcMod("app_mod_margem_detalhe", { p_grupo: args.p_grupo || null, p_entidade: args.p_entidade || null }, true); } catch (e) { $(".gb", g).innerHTML = `<div class="vazio-g">${esc(e.message)}</div>`; return; }
+  const r = d.resultado || {}, s = d.sinais || {};
+  const bloco = (tit, html) => `<div class="bloco"><h4>${tit}</h4>${html}</div>`;
+  const kv = (rot, v, cls) => `<div class="am-k"><span>${rot}</span><b class="${cls || ""}">${v}</b></div>`;
+  const grupo = d.tipo === "grupo";
+  $(".gh", g).innerHTML = `<button class="ib gx" aria-label="Fechar">${I.x}</button>
+    <div class="ey">${grupo ? "Grupo econômico" : "CNPJ"} · competência ${comp(d.competencia)}</div><h3>${esc(d.nome || "—")}</h3>
+    <div class="gc">${grupo ? plural(d.cnpjs.length, "CNPJ", "CNPJs") + " no grupo" : esc(d.cnpjs?.[0]?.cliente || "")}</div>
+    <div class="gp">${pillSem(d.status)}${r.margem_pct != null ? ` <span class="pill ${r.margem_pct < 0 ? "atr" : r.margem_pct < r.margem_alvo_pct ? "risco" : "ok"}">Margem ${n1(r.margem_pct)}%</span>` : ""}</div>`;
+  $(".gx", g).onclick = () => fecharGaveta();
+  const falta = r.honorario_sugerido > r.honorario ? r.honorario_sugerido - r.honorario : 0;
+  $(".gb", g).innerHTML =
+    bloco("Resultado do mês", `<div class="am-g">
+      ${kv("Honorário", brl(r.honorario))}${kv(`Receita líquida (− DAS ${n0(r.das_pct)}%)`, brl(r.receita_liquida))}
+      ${kv("Custo de servir", brl(r.custo))}${kv("Resultado", brl(r.resultado), r.resultado < 0 ? "t-atr" : "t-ok")}
+      ${kv("Horas apontadas", n1(r.horas) + "h")}${kv("Custo médio por hora", r.horas ? "R$ " + n1(r.custo / r.horas) : "—")}</div>
+      ${falta ? `<div class="am-al">Para ${n0(r.margem_alvo_pct)}% de margem, o honorário precisaria ser <b>${brl(r.honorario_sugerido)}</b>: <b>+${brl(falta)}</b> por mês, ou ${n1((r.custo - r.receita_liquida * (1 - r.margem_alvo_pct / 100)) / (r.custo / r.horas || 1))} horas a menos no mês com o honorário atual.</div>` : ""}`) +
+    bloco("Custo por departamento", (d.departamentos || []).map((k) => `<div class="mg-l"><span>${esc(k.departamento)}</span><span class="tr"><i style="width:${k.pct}%"></i></span><b>${brl(k.custo)}</b><small>${n1(k.horas)}h × R$ ${n0(k.custo_hora)}</small></div>`).join("") || '<div style="color:var(--ink3);font-size:13px">Sem horas apontadas na competência.</div>') +
+    bloco("Quem trabalhou", (d.colaboradores || []).map((c) => `<div class="am-c"><b>${esc(curto(c.colaborador))}</b><span>${n1(c.horas)}h</span><small>${esc(c.setores)}</small></div>`).join("") + (d.horas_internas ? `<div style="font-size:12px;color:var(--ink3);margin-top:6px">${n1(d.horas_internas)}h lançadas como "Outros" ficam no custo comum, não neste cliente.</div>` : "")) +
+    (grupo ? bloco("CNPJs do grupo", `<div class="tbw"><table class="tb mini"><thead><tr><th>CNPJ</th><th class="n">Honorário</th><th class="n">Custo</th><th class="n">Resultado</th><th></th></tr></thead><tbody>${(d.cnpjs || []).map((c) => `<tr data-amc="${c.entidade_id}"><td><b>${esc(c.sigla || "—")}</b><div style="font-size:11.5px;color:var(--ink3)">${esc(c.cliente || "")}</div></td><td class="n">${brl(c.honorario)}</td><td class="n">${c.custo == null ? "—" : brl(c.custo)}</td><td class="n"><span class="${c.resultado < 0 ? "t-atr" : ""}">${c.custo == null ? "—" : brl(c.resultado)}</span></td><td>${pillSem(c.status)}</td></tr>`).join("")}</tbody></table></div>
+      <div style="font-size:12px;color:var(--ink3);margin-top:6px">Unidades sem horas costumam ter o trabalho lançado na matriz; o resultado que vale é o do grupo.</div>`) : "") +
+    bloco("Sinais de atendimento (90 dias)", `<div class="am-g">${kv("Atendimentos WhatsApp", n0(s.tickets_90d))}${kv("Mensagens da Utarget", n0(s.msgs_utarget_90d))}${kv("1ª resposta (mediana)", s.resp_mediana_min == null ? "—" : n0(s.resp_mediana_min) + " min")}${kv("Tarefas abertas no G-Click", n0(s.gc_abertas))}${kv("Atrasadas", n0(s.gc_atrasadas), s.gc_atrasadas ? "t-atr" : "")}${kv("Entregues com atraso", n0(s.gc_entregues_atraso_90d))}</div>`);
+  $(".gf", g)?.remove();
+  g.insertAdjacentHTML("beforeend", `<div class="gf">${!grupo && d.entidade_id ? `<button class="btn s" id="am-ficha">Abrir ficha da entidade</button>` : ""}${!grupo && d.cnpjs?.[0]?.grupo && d.cnpjs[0].grupo !== d.nome ? `<button class="btn s" id="am-grupo">Ver o grupo ${esc(d.cnpjs[0].grupo)}</button>` : ""}<button class="btn p" id="am-ok">Fechar</button></div>`);
+  $("#am-ok", g).onclick = () => fecharGaveta();
+  if ($("#am-ficha", g)) $("#am-ficha", g).onclick = () => fichaEntidade(d.entidade_id);
+  if ($("#am-grupo", g)) $("#am-grupo", g).onclick = () => analiseMargem({ p_grupo: d.cnpjs[0].grupo });
+  $$("[data-amc]", g).forEach((t) => (t.onclick = () => analiseMargem({ p_entidade: t.dataset.amc })));
 }
 
 // ---------------------------------------------------------------- ACESSOS (admin)

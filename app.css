@@ -505,3 +505,14 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .mg-u small{color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tb tr.un:hover td{background:none}
 @media (max-width:860px){ .mg-ab{grid-template-columns:1fr} .mg-l{grid-template-columns:90px 1fr 80px} .mg-l small{display:none} }
+.st-b{padding:0;background:none;border:0;cursor:pointer;border-radius:999px}
+.st-b:hover .pill{box-shadow:0 0 0 2px var(--linha)}
+.am-g{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+.am-k{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--ink2);border-bottom:1px solid var(--linha2);padding:6px 0}
+.am-k b{font-variant-numeric:tabular-nums;color:var(--ink)}
+.am-al{margin-top:12px;background:var(--risco-bg);color:var(--risco-ink);border-radius:10px;padding:10px 12px;font-size:13px}
+.am-al b{color:inherit}
+.am-c{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:7px 0;border-bottom:1px solid var(--linha2);font-size:13px}
+.am-c small{grid-column:1/-1;color:var(--ink3);font-size:12px}
+.gav .mg-l{grid-template-columns:100px 1fr 84px 92px}
+@media (max-width:860px){ .am-g{grid-template-columns:1fr} }
