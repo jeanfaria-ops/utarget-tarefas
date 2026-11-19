@@ -113,9 +113,9 @@ async function telaInicio() {
       pulso("financeiro", i.folego_meses == null ? "—" : n1(i.folego_meses), `meses de fôlego de caixa · MRR ${brl(i.mrr)}`, i.folego_meses < 1 ? "atr" : "");
       if (i.folego_meses != null && i.folego_meses < 1) itens.push({ sev: 1, mod: "Financeiro", tit: `Caixa cobre ${n1(i.folego_meses)} mês de despesa`, ctx: `saldo ${brl(i.saldo_bancos)} · despesa média ${brl(i.despesa_media_3m)}`, acao: () => irPara("financeiro") });
       (d.inadimplencia || []).forEach((x) => itens.push({ sev: x.dias > 30 ? 1 : 2, mod: "Financeiro", tit: `${x.cliente} em atraso`, ctx: `${brl(x.em_aberto)} · ${x.dias} dias`, acao: () => irPara("financeiro") })); },
-    margem: async () => { const d = await rpcMod("app_mod_margem"); const r = d.resumo || {};
-      pulso("margem", r.criticos ?? 0, `contratos acima de 110% das horas pagas`, r.criticos ? "atr" : "");
-      if (r.criticos) itens.push({ sev: 2, mod: "Margem", tit: `${r.criticos} contratos consomem mais horas do que o honorário paga`, ctx: d.carteira.filter((x) => x.status === "critico").slice(0, 5).map((x) => x.sigla || x.grupo).join(", "), acao: () => irPara("margem") }); },
+    margem: async () => { const d = await rpcMod("app_mod_margem"); const cr = (d.grupos || []).filter((x) => x.status === "critico");
+      pulso("margem", cr.length, `grupos acima de 110% das horas pagas`, cr.length ? "atr" : "");
+      cr.forEach((x) => itens.push({ sev: x.margem_pct < 0 ? 1 : 2, mod: "Margem", tit: `${x.grupo} consome mais horas do que o honorário paga`, ctx: `${n1(x.horas_reais)}h reais para ${n1(x.horas_suportadas)}h pagas · margem ${n1(x.margem_pct)}%${x.cnpjs > 1 ? " · " + x.cnpjs + " CNPJs" : ""}`, acao: () => irPara("margem") })); },
   };
   await Promise.all(outros.map((x) => (fontes[x.codigo] ? fontes[x.codigo]().catch((e) => pulso(x.codigo, "!", e.message, "atr")) : null)));
   if (st.view !== "inicio") return;
@@ -346,26 +346,46 @@ async function telaFinanceiro() {
   ligaIr($("#view"));
 }
 
-// ---------------------------------------------------------------- MARGEM
+// ---------------------------------------------------------------- MARGEM (por grupo econômico, com abertura por CNPJ)
 async function telaMargem() {
-  cabecalho("Margem", "Horas suportadas pelo honorário × horas apontadas");
+  cabecalho("Margem", "Horas que o honorário paga × horas apontadas, por grupo econômico");
   carregandoView();
   let d; try { d = await rpcMod("app_mod_margem"); } catch (e) { return erroView(e); }
   const r = d.resumo || {}; const p = r.parametros || {};
-  const l = d.carteira.filter((x) => casa(x, ["cliente", "sigla", "grupo", "status"]));
+  const modo = st.margemModo || (st.margemModo = "grupo");
+  const abertos = st.margemAbertos || (st.margemAbertos = new Set());
+  const base = modo === "grupo" ? d.grupos : d.carteira;
+  const cont = (k) => base.filter((x) => x.status === k).length;
+  const hon = base.reduce((a, x) => a + (+x.honorario || 0), 0);
+  const l = base.filter((x) => casa(x, ["grupo", "sigla", "cliente", "status"]) || (x.unidades || []).some((u) => casa(u, ["sigla", "cliente"])));
+  const mg = (v) => (v == null ? "—" : `<span class="${v < 0 ? "t-atr" : v < (p.margem_alvo_pct ?? 40) ? "t-risco" : "t-ok"}">${n1(v)}%</span>`);
+  const sug = (x) => (x.honorario_sugerido > x.honorario ? `<b>${brl(x.honorario_sugerido)}</b><small class="dif">+${brl(x.honorario_sugerido - x.honorario)}</small>` : '<span style="color:var(--ink3)">—</span>');
+  const linhaG = (x) => {
+    const multi = x.cnpjs > 1, ab = abertos.has(x.grupo);
+    return `<tr class="${multi ? "gr" : ""}" data-g="${esc(x.grupo)}" ${!multi && x.entidade_id ? `data-ent="${x.entidade_id}"` : ""}>
+      <td class="cl-c"><b>${multi ? `<span class="tg">${ab ? "▾" : "▸"}</span>` : ""}${esc(x.grupo)}</b><small>${multi ? plural(x.cnpjs, "CNPJ", "CNPJs") + " no grupo" : esc(x.unidades?.[0]?.cliente || "")}</small></td>
+      <td class="n">${brl(x.honorario)}</td><td class="n">${n1(x.horas_suportadas)}</td><td class="n">${x.horas_reais == null ? "—" : n1(x.horas_reais)}</td>
+      <td class="n">${mg(x.margem_pct)}</td><td class="n hm sg">${sug(x)}</td><td>${pillSem(x.status)}</td></tr>
+      ${multi && ab ? x.unidades.map((u) => `<tr class="un" ${u.entidade_id ? `data-ent="${u.entidade_id}"` : 'style="cursor:default"'}><td class="cl-c"><b>${esc(u.sigla || "—")}</b><small>${esc(u.cliente || "")}</small></td>
+        <td class="n">${brl(u.honorario)}</td><td class="n">${n1(u.horas_suportadas)}</td><td class="n">${u.horas_reais == null ? "—" : n1(u.horas_reais)}</td><td colspan="2" class="hm" style="color:var(--ink3);font-size:12px">apontamento por CNPJ</td><td>${pillSem(u.status)}</td></tr>`).join("") : ""}`;
+  };
+  const linhaC = (x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="cl-c"><b>${esc(x.sigla || x.grupo || "—")}</b><small>${esc(x.cliente || "")}${x.grupo && x.grupo !== x.sigla ? " · grupo " + esc(x.grupo) : ""}</small></td>
+    <td class="n">${brl(x.honorario)}</td><td class="n">${n1(x.horas_suportadas)}</td><td class="n">${x.horas_reais == null ? "—" : n1(x.horas_reais)}</td><td class="n">${mg(x.margem_pct)}</td><td class="n hm sg">${sug(x)}</td><td>${pillSem(x.status)}</td></tr>`;
   $("#view").innerHTML = `
     <div class="kpis">
-      ${kpiM("Contratos", r.contratos ?? "—", `MRR ${brl(r.mrr)}`)}
-      ${kpiM("Críticos", r.criticos ?? 0, `horas acima de ${p.limite_critico_pct ?? 110}% do suportado`, "atr")}
-      ${kpiM("Atenção", r.atencao ?? 0, `entre ${p.limite_ok_pct ?? 90}% e ${p.limite_critico_pct ?? 110}%`, "risco")}
-      ${kpiM("OK", r.ok ?? 0, `até ${p.limite_ok_pct ?? 90}%`, "ok")}
-      ${kpiM("Sem apontamento", r.sem_apontamento ?? 0, `${r.sem_entidade ?? 0} sem entidade · horas de ${comp(r.competencia_horas)}`, "risco")}
+      ${kpiM(modo === "grupo" ? "Grupos econômicos" : "Contratos", base.length, `${brl(hon)} de honorário mensal`)}
+      ${kpiM("Críticos", cont("critico"), `horas acima de ${p.limite_critico_pct ?? 110}% do que o honorário paga`, "atr")}
+      ${kpiM("Atenção", cont("atencao"), `entre ${p.limite_ok_pct ?? 90}% e ${p.limite_critico_pct ?? 110}%`, "risco")}
+      ${kpiM("OK", cont("ok"), `até ${p.limite_ok_pct ?? 90}%`, "ok")}
+      ${kpiM("Sem apontamento", cont("sem_apontamento"), `horas de ${comp(r.competencia_horas)}`, "risco")}
     </div>
-    <div class="card" style="padding:6px 10px">${tabela([["Cliente"], ["Honorário", "n"], ["Horas sup.", "n"], ["Horas reais", "n"], ["Margem", "n"], ["Sugerido", "n hm"], ["Situação"]],
-      l.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td><div class="forte">${esc(x.sigla || x.grupo || "—")}</div><div style="font-size:11.5px;color:var(--ink3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.cliente || "")}</div></td>
-        <td class="n">${brl(x.honorario)}</td><td class="n">${n1(x.horas_suportadas)}</td><td class="n">${n1(x.horas_reais)}</td><td class="n">${x.margem_pct == null ? "—" : n1(x.margem_pct) + "%"}</td>
-        <td class="n hm">${x.honorario_sugerido > x.honorario ? `<b>${brl(x.honorario_sugerido)}</b>` : "—"}</td><td>${pillSem(x.status)}</td></tr>`))}</div>
-    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo-hora R$ ${esc(p.custo_hora ?? "—")} · DAS ${esc(p.das_pct ?? "—")}% · margem-alvo ${esc(p.margem_alvo_pct ?? "—")}%. Horas reais zeradas com status OK indicam falta de apontamento, não folga.</div>`;
+    <div class="card" style="padding:4px 8px">
+      <div class="sec-h" style="padding:12px 8px 4px"><div><h2>${modo === "grupo" ? "Por grupo econômico" : "Por CNPJ"}</h2><p>${modo === "grupo" ? "Matriz e unidades somadas. Clique no grupo para abrir os CNPJs." : "Cada contrato isolado. Unidades de grupo costumam ter as horas lançadas na matriz."}</p></div>
+        ${segV("mg", [["grupo", "Por grupo"], ["cnpj", "Por CNPJ"]], modo)}</div>
+      ${tabela([["Cliente"], ["Honorário", "n"], ["Horas pagas", "n"], ["Horas reais", "n"], ["Margem", "n"], ["Honorário sugerido", "n hm"], ["Situação"]], l.map(modo === "grupo" ? linhaG : linhaC))}</div>
+    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo-hora R$ ${esc(p.custo_hora ?? "—")} · DAS ${esc(p.das_pct ?? "—")}% · margem-alvo ${esc(p.margem_alvo_pct ?? "—")}%. Horas pagas = honorário líquido de DAS e margem-alvo ÷ custo-hora. Horas reais zeradas com status OK indicam falta de apontamento, não folga.</div>`;
+  $$("[data-seg=mg]").forEach((b) => (b.onclick = () => { st.margemModo = b.dataset.k; telaMargem(); }));
+  $$("tr.gr").forEach((t) => (t.onclick = () => { const g = t.dataset.g; abertos.has(g) ? abertos.delete(g) : abertos.add(g); telaMargem(); }));
   ligaIr($("#view"));
 }
 
