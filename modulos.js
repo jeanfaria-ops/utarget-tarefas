@@ -745,7 +745,8 @@ async function telaGclick() {
   carregandoView();
   let d; try { d = await rpcMod("app_mod_gclick"); } catch (e) { return erroView(e); }
   const f = st.fg || (st.fg = { chip: "atr", dep: "", resp: "", cli: "", cat: "todas", lim: 40 });
-  const todas = d.tarefas.map((t) => ({ ...t, dep: DEP_CURTO(t.dep), sit: gcSituacao(t, hoje), resp: t.resp || [] }));
+  const nomeP = (n) => (n === n.toUpperCase() ? n.toLowerCase().replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()) : n);
+  const todas = d.tarefas.map((t) => ({ ...t, dep: DEP_CURTO(t.dep), sit: gcSituacao(t, hoje), resp: [...new Set((t.resp || []).map(nomeP))] }));
   const pinta = () => {
     const U = todas.filter((t) => (st.escopo === "minhas" ? t.minha : true) && (f.cat === "todas" || t.cat === f.cat));
     const ab = U.filter((t) => t.ab), atr = ab.filter((t) => t.sit === "atr"), v7 = ab.filter((t) => t.sit === "v7");
@@ -776,7 +777,7 @@ async function telaGclick() {
     // carga por pessoa
     const porResp = new Map();
     ab.forEach((t) => (t.resp.length ? t.resp : ["Sem responsável"]).forEach((r) => { const o = porResp.get(r) || { k: r, atr: 0, v7: 0, ok: 0, multa: 0 }; o[t.sit]++; if (t.multa && t.sit === "atr") o.multa++; porResp.set(r, o); }));
-    const resp = [...porResp.values()].sort((a, b) => b.atr - a.atr || b.atr + b.v7 + b.ok - (a.atr + a.v7 + a.ok)).slice(0, 12);
+    const resp = [...porResp.values()].filter((o) => o.k !== "Sem responsável").sort((a, b) => b.atr - a.atr || b.atr + b.v7 + b.ok - (a.atr + a.v7 + a.ok)).slice(0, 12);
     // departamentos
     const deps = [...new Set(U.map((t) => t.dep))].map((k) => { const a = ab.filter((t) => t.dep === k), e = ent.filter((t) => t.dep === k), p = e.filter((t) => !t.venc || t.conc <= t.venc);
       return { k, ab: a.length, atr: a.filter((t) => t.sit === "atr").length, multa: a.filter((t) => t.sit === "atr" && t.multa).length, v7: a.filter((t) => t.sit === "v7").length, ent: e.length, pct: e.length ? Math.round((100 * p.length) / e.length) : null }; })
@@ -804,7 +805,7 @@ async function telaGclick() {
       ${kpiG("semresp", "Sem responsável", n0(semResp), `nomes lidos em ${cober}% das abertas`, "")}
     </div>
     <div class="grade">
-      <section class="card"><div class="sec-h"><div><h2>Carga por pessoa</h2><p>Tarefas abertas em que a pessoa consta como responsável no G-Click. Clique para filtrar.</p></div></div>
+      <section class="card"><div class="sec-h"><div><h2>Carga por pessoa</h2><p>Tarefas abertas em que a pessoa consta como responsável no G-Click. Clique para filtrar. As sem responsável lido ficam no indicador acima.</p></div></div>
         ${legenda([["Atrasada", GC_COR.atr], ["Vence em 7 dias", GC_COR.v7], ["Em dia", GC_COR.ok]])}
         ${resp.length ? vizBarras(resp.map((o) => ({ rot: o.k === "Sem responsável" ? o.k : curto(o.k), attr: `data-fresp="${esc(o.k)}" style="cursor:pointer"`, valor: `${o.atr ? `<b style="color:var(--atr-ink)">${o.atr}</b> / ` : ""}${o.atr + o.v7 + o.ok}`,
           partes: [{ v: o.atr, cor: GC_COR.atr, rot: `Atrasadas${o.multa ? " (" + o.multa + " com multa)" : ""}` }, { v: o.v7, cor: GC_COR.v7, rot: "Vencem em 7 dias" }, { v: o.ok, cor: GC_COR.ok, rot: "Em dia" }] }))) : '<div class="vazio-g">Sem tarefas abertas.</div>'}
