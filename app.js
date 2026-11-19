@@ -1,4 +1,4 @@
-// Utarget Tarefas — v0.2 (18/11/2026): Painel BI, Hoje, nova tarefa com checklist. Dados e acesso: Supabase utarget-dados (RLS + RPCs).
+// Cockpit Utarget — v0.5 (19/11/2026): app de tarefas vira cockpit com módulos por perfil (modulos.js). Dados e acesso: Supabase utarget-dados (RLS + RPCs).
 const SUPABASE_URL = "https://okgxketgsyggzpvnapup.supabase.co";
 const SUPABASE_KEY = "sb_publishable_fwAjsYH7ZOV177xeq0O86g_INBxCAY9"; // chave pública; o acesso é controlado pelo banco
 const sb = window.__mockSb || supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { flowType: "pkce", persistSession: true, detectSessionInUrl: true } });
@@ -12,9 +12,9 @@ const ls = { get(k, d) { try { const v = localStorage.getItem("ut." + k); return
 
 const st = {
   eu: null, base: [], carregado: false, carregando: false,
-  view: ls.get("view", "painel"), escopo: ls.get("escopo", null),
+  view: ls.get("view", "inicio"), escopo: ls.get("escopo", null),
   f: { q: "", chip: "todas", dept: "", pessoa: "", cliente: "", dia: "", horiz: ls.get("horiz", 0) },
-  limite: {}, usuarios: [], clientes: [], deptos: [], modelos: [], tabela: {}, pend: new Map(),
+  limite: {}, usuarios: [], clientes: [], deptos: [], modelos: [], tabela: {}, pend: new Map(), mods: [],
 };
 const ABERTOS = ["entrada", "a_fazer", "em_andamento", "aguardando", "em_aprovacao", "retificando"];
 const STATUS = { entrada: "Entrada", a_fazer: "A fazer", em_andamento: "Em andamento", aguardando: "Aguardando", em_aprovacao: "Em aprovação", retificando: "Retificando", concluida: "Concluída", dispensada: "Dispensada" };
@@ -90,7 +90,7 @@ function telaLogin(msg = "") {
     <section class="arte">
       <img src="logo-azul.svg" alt="Utarget Contabilidade &amp; Assessoria">
       <div><h1>Nenhum prazo <em>passa</em> despercebido.</h1>
-      <p>Tarefas, obrigações e clientes da Utarget num só lugar, com o placar de prazos em tempo real.</p></div>
+      <p>Tarefas, clientes, legalização, captação e números da Utarget num só lugar. Cada pessoa vê o que é da sua área.</p></div>
       <div class="rod">Utarget Contabilidade &amp; Assessoria · (11) 2642-8636</div>
       <div class="reg"></div>
     </section>
@@ -121,7 +121,7 @@ async function carregar(silencioso) {
   if (error) { toast("Erro ao carregar: " + error.message); return; }
   st.base = (data || []).map((t) => ({ ...t, titulo: limpa(t.titulo) }));
   st.carregado = true;
-  if (!silencioso || !$(".gav.on")) renderView();
+  if (!silencioso || (!$(".gav.on") && !MODS[st.view] || st.view === "inicio")) renderView();
 }
 function marcaAtualizando() { const b = $("#att"); if (b) b.classList.toggle("gira", st.carregando); }
 async function listas() {
@@ -146,16 +146,18 @@ function universo() { // tarefas no escopo atual (Minhas / Equipe)
 // ---------------------------------------------------------------- casca
 function casca() {
   const nEntrada = st.base.filter((t) => t.status === "entrada").length;
-  const abas = [["painel", "Painel", I.painel], ["hoje", "Tarefas", I.hoje]].concat(gestor() ? [["entrada", "Entrada", I.entrada]] : []).concat([["modelos", "Modelos", I.lista]]);
+  const abas = navItens();
+  const grupoTar = ["painel", "hoje", "entrada", "modelos"];
+  const tab = [abas.find((a) => a[0] === "inicio"), abas.find((a) => a[0] === "hoje"), abas.find((a) => a[0] === "carteira") || abas.find((a) => a[0] === "painel")].filter(Boolean);
   const tema = ls.get("tema", "auto");
   app.innerHTML = `
   <div class="shell">
     <aside class="side">
       <img class="logo" src="logo-azul.svg" alt="Utarget">
       <nav class="nav" aria-label="Principal">
-        ${abas.map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span>${k === "entrada" && nEntrada ? `<span class="badge">${nEntrada}</span>` : ""}</button>`).join("")}
+        ${abas.map(([k, n, ic], i) => `${grupoTar.includes(k) && !grupoTar.includes(abas[i - 1]?.[0]) ? '<div class="rot n1">Tarefas</div>' : ""}${!grupoTar.includes(k) && k !== "inicio" && (grupoTar.includes(abas[i - 1]?.[0]) || abas[i - 1]?.[0] === "inicio") ? '<div class="rot n1">Módulos</div>' : ""}<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span>${k === "entrada" && nEntrada ? `<span class="badge">${nEntrada}</span>` : ""}</button>`).join("")}
       </nav>
-      <div class="rot">Visão</div>
+      <div class="rot">Visão das tarefas</div>
       <div class="seg" role="group" aria-label="Escopo">
         <button data-e="minhas" aria-pressed="${st.escopo === "minhas"}">Minhas</button>
         <button data-e="equipe" aria-pressed="${st.escopo === "equipe"}">Equipe</button>
@@ -179,22 +181,24 @@ function casca() {
       <main class="view" id="view"></main>
     </div>
   </div>
-  <nav class="tabbar" style="--n:${abas.length + (podeCriar() ? 1 : 0)}" aria-label="Principal">
-    ${abas.slice(0, 2).map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span></button>`).join("")}
+  <nav class="tabbar" style="--n:${tab.length + 1 + (podeCriar() ? 1 : 0)}" aria-label="Principal">
+    ${tab.slice(0, 2).map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span></button>`).join("")}
     ${podeCriar() ? `<button id="nova-m">${I.mais}<span>Nova</span></button>` : ""}
-    ${abas.slice(2).map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span>${k === "entrada" && nEntrada ? `<span class="badge">${nEntrada}</span>` : ""}</button>`).join("")}
+    ${tab.slice(2).map(([k, n, ic]) => `<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n.split(" ")[0]}</span></button>`).join("")}
+    <button id="mais-m">${I.menu}<span>Mais</span></button>
   </nav>`;
   $$("[data-v]").forEach((b) => (b.onclick = () => irPara(b.dataset.v)));
   $$("[data-e]").forEach((b) => (b.onclick = () => { st.escopo = b.dataset.e; ls.set("escopo", st.escopo); casca(); renderView(); }));
   $$("[data-t]").forEach((b) => (b.onclick = () => { ls.set("tema", b.dataset.t); aplicaTema(); casca(); renderView(); }));
   $("#sair").onclick = async () => { await sb.auth.signOut(); location.reload(); };
-  $("#att").onclick = () => carregar();
+  $("#att").onclick = () => { limpaCacheMod(); carregar(); };
+  if ($("#mais-m")) $("#mais-m").onclick = () => menuMais();
   if ($("#nova")) $("#nova").onclick = () => novaTarefa();
   if ($("#nova-m")) $("#nova-m").onclick = () => novaTarefa();
   const q = $("#q");
-  q.oninput = () => { st.f.q = q.value; if ((st.view === "painel" || st.view === "modelos") && q.value) { st.view = "hoje"; atualizaNav(); } renderView(); };
+  q.oninput = () => { st.f.q = q.value; if (["painel", "modelos", "inicio"].includes(st.view) && q.value) { st.view = "hoje"; atualizaNav(); } renderView(); };
 }
-function atualizaNav() { $$("[data-v]").forEach((b) => (b.dataset.v === st.view ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"))); ls.set("view", st.view); }
+function atualizaNav() { $$("[data-v]").forEach((b) => (b.dataset.v === st.view ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"))); ls.set("view", st.view); dica(); }
 function irPara(v, filtros) {
   st.view = v;
   if (filtros) { st.f = { ...st.f, chip: "todas", dept: "", pessoa: "", cliente: "", dia: "", ...filtros }; }
@@ -205,7 +209,9 @@ function cabecalho(t, s) { $("#titulo").textContent = t; $("#subtitulo").textCon
 function renderView() {
   if (!$("#view")) return;
   if (!st.carregado) return esqueleto();
-  if (st.view === "painel") painel();
+  if (!navItens().some((a) => a[0] === st.view)) st.view = "inicio";
+  if (MODS[st.view]) MODS[st.view]();
+  else if (st.view === "painel") painel();
   else if (st.view === "modelos") telaModelos();
   else lista(st.view === "entrada");
 }
@@ -909,15 +915,16 @@ async function iniciar() {
   if (error || !data || !data.length) { await sb.auth.signOut(); return telaLogin("Seu e-mail não está cadastrado no app. Fale com o administrador."); }
   iniciado = true;
   st.eu = data[0];
+  const mm = await sb.rpc("app_meus_modulos");
+  st.mods = mm.data || [];
   if (!st.escopo) st.escopo = gestor() ? "equipe" : "minhas";
-  if (st.view === "entrada" && !gestor()) st.view = "painel";
+  if (st.view === "entrada" && !gestor()) st.view = "inicio";
   casca(); renderView();
   await carregar();
   casca(); renderView();
   listas();
-  setInterval(() => document.visibilityState === "visible" && !$(".gav") && carregar(true), 60000);
+  setInterval(() => document.visibilityState === "visible" && !$(".gav") && !MODS[st.view] && carregar(true), 60000);
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && !$(".gav") && carregar(true));
 }
 sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_IN" && !st.eu) iniciar(); });
-iniciar();
-if ("serviceWorker" in navigator && !window.__mockSb) navigator.serviceWorker.register("sw.js").catch(() => {});
+// iniciar() e o service worker são chamados no fim de modulos.js, depois que os módulos existem.
