@@ -38,7 +38,8 @@ const curto = (n) => { const p = limpa(n).split(" "); return p.length > 1 ? p[0]
 const ini = (n) => limpa(n).split(" ").filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
 const gestor = () => ["admin", "lider"].includes(st.eu?.papel);
-const podeCriar = () => ["admin", "lider", "operador", "comercial"].includes(st.eu?.papel);
+const MOTOR_PROPRIO = false; // tarefas executadas no G-Click; o motor próprio volta quando a migração for decidida
+const podeCriar = () => MOTOR_PROPRIO && ["admin", "lider", "operador", "comercial"].includes(st.eu?.papel);
 
 const I = {
   painel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
@@ -147,8 +148,8 @@ function universo() { // tarefas no escopo atual (Minhas / Equipe)
 function casca() {
   const nEntrada = st.base.filter((t) => t.status === "entrada").length;
   const abas = navItens();
-  const grupoTar = ["painel", "hoje", "entrada", "modelos"];
-  const tab = [abas.find((a) => a[0] === "inicio"), abas.find((a) => a[0] === "hoje"), abas.find((a) => a[0] === "carteira") || abas.find((a) => a[0] === "painel")].filter(Boolean);
+  const grupoTar = ["gclick", "painel", "hoje", "entrada", "modelos"];
+  const tab = [abas.find((a) => a[0] === "inicio"), abas.find((a) => a[0] === "gclick") || abas.find((a) => a[0] === "hoje"), abas.find((a) => a[0] === "carteira") || abas.find((a) => a[0] === "margem")].filter(Boolean);
   const tema = ls.get("tema", "auto");
   app.innerHTML = `
   <div class="shell">
@@ -196,7 +197,7 @@ function casca() {
   if ($("#nova")) $("#nova").onclick = () => novaTarefa();
   if ($("#nova-m")) $("#nova-m").onclick = () => novaTarefa();
   const q = $("#q");
-  q.oninput = () => { st.f.q = q.value; if (["painel", "modelos", "inicio"].includes(st.view) && q.value) { st.view = "hoje"; atualizaNav(); } renderView(); };
+  q.oninput = () => { st.f.q = q.value; if (["painel", "modelos", "inicio"].includes(st.view) && q.value) { st.view = MOTOR_PROPRIO ? "hoje" : "gclick"; atualizaNav(); } renderView(); };
 }
 function atualizaNav() { $$("[data-v]").forEach((b) => (b.dataset.v === st.view ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"))); ls.set("view", st.view); dica(); }
 function irPara(v, filtros) {

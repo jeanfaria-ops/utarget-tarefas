@@ -132,8 +132,8 @@ function vizBarras(linhas, { fmt = (v) => n0(v), max } = {}) {
 
 
 // colunas empilhadas (categorias no eixo x)
-function vizColunas(cols, chaves, cores, { H = 210, destaque } = {}) {
-  const W = 680, pl = 30, pr = 6, pt = 18, pb = 34, n = cols.length, bw = (W - pl - pr) / n;
+function vizColunas(cols, chaves, cores, { H = 210, destaque, W = 680 } = {}) {
+  const pl = 30, pr = 6, pt = 18, pb = 34, n = cols.length, bw = (W - pl - pr) / n;
   const mx = Math.max(1, ...cols.map((c) => chaves.reduce((a, k) => a + (c.partes[k] || 0), 0)));
   const Y = (v) => pt + (H - pt - pb) * (1 - v / mx), step = Math.max(1, Math.ceil(mx / 4));
   const ticks = []; for (let t = 0; t <= mx; t += step) ticks.push(t);
@@ -152,8 +152,6 @@ function vizColunas(cols, chaves, cores, { H = 210, destaque } = {}) {
 // ---------------------------------------------------------------- INÍCIO: "Precisa de você" + pulso por módulo
 async function telaInicio() {
   const hoje = hojeISO();
-  const minhas = st.base.filter((t) => t.minha);
-  const m = metricas(minhas, hoje);
   const h = +new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
   cabecalho("Início", extenso(hoje));
   const outros = (st.mods || []).filter((x) => !["tarefas", "acessos"].includes(x.codigo));
@@ -163,17 +161,24 @@ async function telaInicio() {
       <section class="card ini-f"><div class="sec-h"><div><h2>Precisa de você</h2><p>Do mais grave ao menos grave. Clique para ir direto ao item.</p></div></div>
         <div id="feed"><div class="sk" style="height:260px"></div></div></section>
       <aside class="ini-p"><div class="ini-pt">Pulso</div><div id="pulso">
-        <button class="pl" data-ir="hoje"><span class="pn ${m.atr.length ? "t-atr" : ""}">${m.atr.length}</span><span class="pr"><b>Minhas tarefas atrasadas</b><small>${m.ab.length} abertas · ${m.risco.length} vencem em 3 dias</small></span></button>
+        ${temMod("tarefas") ? `<button class="pl" data-ir="gclick" id="pl-gclick"><span class="pn"><i class="sk" style="display:block;width:34px;height:24px"></i></span><span class="pr"><b>Minhas tarefas atrasadas</b><small>carregando do G-Click…</small></span></button>` : ""}
         ${outros.map((x) => `<button class="pl" data-ir="${x.codigo}" id="pl-${x.codigo}"><span class="pn"><i class="sk" style="display:block;width:34px;height:24px"></i></span><span class="pr"><b>${esc(x.nome)}</b><small>carregando…</small></span></button>`).join("")}
       </div></aside>
     </div>`;
   ligaIr();
   const itens = [];
-  // tarefas próprias
-  m.atr.slice(0, 4).forEach((t) => itens.push({ sev: t.gera_multa ? 0 : 1, mod: "Tarefas", tit: limpa(t.titulo), ctx: `${t.entidade || "Sem cliente"} · venceu ${dm(t.vencimento)}${t.gera_multa ? " · gera multa" : ""}`, acao: () => abrir(t.id) }));
-  if (m.atr.length > 4) itens.push({ sev: 1, mod: "Tarefas", tit: `Mais ${m.atr.length - 4} tarefas suas atrasadas`, ctx: "Abrir a lista filtrada", acao: () => irPara("hoje", { chip: "atr" }) });
   const pulso = (cod, n, sub, cls) => { const b = $(`#pl-${cod}`); if (b) { $(".pn", b).className = "pn " + (cls ? "t-" + cls : ""); $(".pn", b).textContent = n; $("small", b).textContent = sub; } };
   const fontes = {
+    gclick: async () => { const d = await rpcMod("app_mod_gclick"); const ab = d.tarefas.filter((t) => t.ab && t.minha);
+      const atr = ab.filter((t) => t.venc && t.venc < hoje), v7 = ab.filter((t) => t.venc && t.venc >= hoje && diff(t.venc, hoje) <= 7);
+      pulso("gclick", atr.length, `${ab.length} abertas no G-Click · ${v7.length} vencem em 7 dias`, atr.length ? "atr" : "");
+      const vai = (chip) => () => { st.escopo = "minhas"; ls.set("escopo", "minhas"); st.fg = { ...(st.fg || { dep: "", resp: "", cli: "", cat: "todas", lim: 40 }), chip, dep: "", resp: "", cli: "" }; casca(); irPara("gclick"); };
+      const multa = [...atr, ...v7].filter((t) => t.multa);
+      multa.slice(0, 4).forEach((t) => itens.push({ sev: 0, mod: "Prazos", tit: `${t.nome} · ${t.cli || "sem cliente"}`, ctx: t.venc < hoje ? `venceu ${dm(t.venc)} · gera multa` : `vence ${dm(t.venc)} · gera multa`, acao: vai("multa") }));
+      const recentes = atr.filter((t) => !t.multa && diff(hoje, t.venc) <= 30);
+      if (recentes.length) itens.push({ sev: 1, mod: "Prazos", tit: `${plural(recentes.length, "tarefa sua atrasou", "tarefas suas atrasaram")} nos últimos 30 dias`, ctx: topN(recentes, (t) => t.nome, 3).map((o) => `${o.k} (${o.n})`).join(" · "), acao: vai("atr") });
+      const velhas = atr.length - recentes.length - atr.filter((t) => t.multa && diff(hoje, t.venc) <= 30).length;
+      if (velhas > 0) itens.push({ sev: 2, mod: "Prazos", tit: `${plural(velhas, "tarefa vencida", "tarefas vencidas")} há mais de 30 dias`, ctx: "Conferir se foram entregues e ficaram sem baixa no G-Click", acao: vai("atr") }); },
     carteira: async () => { const d = (await rpcMod("app_mod_carteira")).filter((x) => x.segmento === "osc");
       const atr = d.filter((x) => x.atr > 0), verm = d.filter((x) => x.semaforo === "vermelho");
       pulso("carteira", verm.length, `OSCs com trilha vermelha de ${d.length}`, verm.length ? "atr" : "");
@@ -203,7 +208,7 @@ async function telaInicio() {
       pulso("margem", cr.length, `grupos econômicos no prejuízo`, cr.length ? "atr" : "");
       cr.forEach((x) => itens.push({ sev: 1, mod: "Margem", tit: `${x.grupo} dá prejuízo de ${brl(-x.resultado)} por mês`, ctx: `margem ${n1(x.margem_pct)}% · mais pesa: ${x.deptos?.[0]?.departamento || "—"}${x.cnpjs > 1 ? " · " + x.cnpjs + " CNPJs" : ""}`, acao: () => irPara("margem") })); },
   };
-  await Promise.all(outros.map((x) => (fontes[x.codigo] ? fontes[x.codigo]().catch((e) => pulso(x.codigo, "!", e.message, "atr")) : null)));
+  await Promise.all((temMod("tarefas") ? [{ codigo: "gclick" }] : []).concat(outros).map((x) => (fontes[x.codigo] ? fontes[x.codigo]().catch((e) => pulso(x.codigo, "!", e.message, "atr")) : null)));
   if (st.view !== "inicio") return;
   itens.sort((a, b) => a.sev - b.sev);
   const graves = itens.filter((i) => i.sev <= 1).length;
@@ -723,19 +728,151 @@ function menuMais() {
 }
 
 // lista de itens de navegação montada a partir dos módulos liberados
+// ---------------------------------------------------------------- CENTRAL DE PRAZOS (espelho do G-Click, só leitura)
+// Fonte: gclick_tarefas + gclick_resp, coletados pela edge function coletor-gclick-tarefas (dias úteis, a cada 2h).
+// O G-Click continua sendo onde a tarefa é executada e baixada; aqui é leitura para decidir.
+const DEP_CURTO = (d) => ({ "Contabilidade": "Contábil", "Departamento Pessoal": "DP", "Certificações (CENTS, CMDCA, CRCE, ETC )": "Certificações", "Sucesso do Cliente": "CS" }[d] || d || "Sem departamento");
+const GC_COR = { atr: "var(--c-atr)", v7: "var(--c-risco)", ok: "var(--c-ok)", multa: "var(--c-atr)", sem: "var(--s-neu)" };
+function gcSituacao(t, hoje) {
+  if (!t.ab) return "feita";
+  if (!t.venc) return "ok";
+  const d = diff(t.venc, hoje);
+  return d < 0 ? "atr" : d <= 7 ? "v7" : "ok";
+}
+async function telaGclick() {
+  const hoje = hojeISO();
+  cabecalho("Central de prazos", "Espelho do G-Click · carregando…");
+  carregandoView();
+  let d; try { d = await rpcMod("app_mod_gclick"); } catch (e) { return erroView(e); }
+  const f = st.fg || (st.fg = { chip: "atr", dep: "", resp: "", cli: "", cat: "todas", lim: 40 });
+  const todas = d.tarefas.map((t) => ({ ...t, dep: DEP_CURTO(t.dep), sit: gcSituacao(t, hoje), resp: t.resp || [] }));
+  const pinta = () => {
+    const U = todas.filter((t) => (st.escopo === "minhas" ? t.minha : true) && (f.cat === "todas" || t.cat === f.cat));
+    const ab = U.filter((t) => t.ab), atr = ab.filter((t) => t.sit === "atr"), v7 = ab.filter((t) => t.sit === "v7");
+    const ent = U.filter((t) => !t.ab && t.conc && ["Concluída", "Finalizada", "Retificada"].includes(t.st));
+    const noPrazo = ent.filter((t) => !t.venc || t.conc <= t.venc);
+    const pct = ent.length ? Math.round((100 * noPrazo.length) / ent.length) : null;
+    const atrM = atr.filter((t) => t.multa), v7M = v7.filter((t) => t.multa);
+    const velhas = atr.filter((t) => diff(hoje, t.venc) > 60);
+    const semResp = ab.filter((t) => !t.resp.length).length;
+    const cober = d.abertas_total ? Math.round((100 * d.abertas_com_resp) / d.abertas_total) : 0;
+    cabecalho("Central de prazos", `Espelho do G-Click · atualizado ${quando(d.coletado_em)} · ${st.escopo === "minhas" ? "minhas tarefas" : "visão da equipe"}`);
+
+    // frase de decisão
+    const topCli = topN(atr, (t) => t.cli || "Sem cliente", 1)[0], topNome = topN(atr, (t) => t.nome, 1)[0];
+    const frase = atr.length
+      ? `${topNome ? `A que mais pesa é <b>${esc(topNome.k)}</b> (${topNome.n}).` : ""} ${velhas.length ? `<b>${velhas.length}</b> venceram há mais de 60 dias: confira se foram entregues e ficaram sem baixa no G-Click.` : ""}`
+      : v7.length ? `Nada atrasado. <b>${plural(v7.length, "tarefa vence", "tarefas vencem")}</b> nos próximos 7 dias${v7M.length ? `, ${v7M.length} com multa` : ""}.` : "Nada atrasado e nada vencendo nos próximos 7 dias.";
+
+    // idade do atraso
+    const faixas = [["1–7 dias", 1, 7], ["8–30", 8, 30], ["31–60", 31, 60], ["61–90", 61, 90], ["+90", 91, 1e5]];
+    const idade = faixas.map(([rot, a, b]) => { const l = atr.filter((t) => { const x = diff(hoje, t.venc); return x >= a && x <= b; });
+      return { rot, partes: { "Com multa": l.filter((t) => t.multa).length, "Sem multa": l.filter((t) => !t.multa).length }, lista: resumo(l, (t) => t.nome) }; });
+    // próximos 30 dias
+    const estreito = innerWidth < 760, nDias = estreito ? 14 : 30;
+    const dias = Array.from({ length: nDias }, (_, i) => addD(hoje, i));
+    const cal = dias.map((dd, i) => { const l = ab.filter((t) => t.venc === dd);
+      return { rot: i === 0 ? "Hoje" : String(+dd.slice(8)), tit: `${dsem(dd)} ${dm(dd)}`, partes: { "Com multa": l.filter((t) => t.multa).length, "Sem multa": l.filter((t) => !t.multa).length }, lista: resumo(l, (t) => t.nome) }; });
+    // carga por pessoa
+    const porResp = new Map();
+    ab.forEach((t) => (t.resp.length ? t.resp : ["Sem responsável"]).forEach((r) => { const o = porResp.get(r) || { k: r, atr: 0, v7: 0, ok: 0, multa: 0 }; o[t.sit]++; if (t.multa && t.sit === "atr") o.multa++; porResp.set(r, o); }));
+    const resp = [...porResp.values()].sort((a, b) => b.atr - a.atr || b.atr + b.v7 + b.ok - (a.atr + a.v7 + a.ok)).slice(0, 12);
+    // departamentos
+    const deps = [...new Set(U.map((t) => t.dep))].map((k) => { const a = ab.filter((t) => t.dep === k), e = ent.filter((t) => t.dep === k), p = e.filter((t) => !t.venc || t.conc <= t.venc);
+      return { k, ab: a.length, atr: a.filter((t) => t.sit === "atr").length, multa: a.filter((t) => t.sit === "atr" && t.multa).length, v7: a.filter((t) => t.sit === "v7").length, ent: e.length, pct: e.length ? Math.round((100 * p.length) / e.length) : null }; })
+      .filter((x) => x.ab || x.ent).sort((a, b) => b.atr - a.atr || b.ab - a.ab);
+    // clientes e obrigações
+    const clis = topN(atr, (t) => t.cli || "Sem cliente", 10).map((o) => ({ ...o, ent: atr.find((t) => (t.cli || "Sem cliente") === o.k)?.ent, multa: o.l.filter((t) => t.multa).length }));
+    const obr = topN(atr, (t) => t.nome, 8).map((o) => ({ ...o, multa: o.l.filter((t) => t.multa).length, clis: new Set(o.l.map((t) => t.cli)).size }));
+
+    // lista filtrada
+    const chips = { atr: (t) => t.ab && t.sit === "atr", multa: (t) => t.ab && t.multa && ["atr", "v7"].includes(t.sit), v7: (t) => t.ab && t.sit === "v7", ab: (t) => t.ab, ent: (t) => !t.ab && t.conc && ["Concluída", "Finalizada", "Retificada"].includes(t.st), tarde: (t) => !t.ab && t.conc && t.venc && t.conc > t.venc && ["Concluída", "Finalizada", "Retificada"].includes(t.st) };
+    const base = U.filter((t) => (!f.dep || t.dep === f.dep) && (!f.resp || (f.resp === "Sem responsável" ? !t.resp.length : t.resp.includes(f.resp))) && (!f.cli || (t.cli || "Sem cliente") === f.cli))
+      .filter((t) => casa({ ...t, r: t.resp.join(" ") }, ["nome", "cli", "dep", "r"]));
+    const lst = base.filter(chips[f.chip]).sort((a, b) => (f.chip === "ent" || f.chip === "tarde" ? (b.conc || "").localeCompare(a.conc || "") : f.chip === "atr" ? b.multa - a.multa || (b.venc || "").localeCompare(a.venc || "") : (a.venc || "9").localeCompare(b.venc || "9") || b.multa - a.multa));
+    const chip = (k, rot, c) => `<button class="chip" data-gc="${k}" aria-pressed="${f.chip === k}">${c ? `<i style="background:${c}"></i>` : ""}${rot} <b>${base.filter(chips[k]).length}</b></button>`;
+    const ativo = [f.dep && ["dep", "Depto: " + f.dep], f.resp && ["resp", "Pessoa: " + curto(f.resp)], f.cli && ["cli", "Cliente: " + f.cli]].filter(Boolean);
+
+    $("#view").innerHTML = `
+    <div class="saud"><div><h2>${atr.length ? `${atr.length} atrasadas` : "Em dia"}${atrM.length ? ` · <span style="color:var(--atr-ink)">${atrM.length} com multa</span>` : ""}</h2><p>${frase}</p></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${segV("gcat", [["todas", "Tudo"], ["Obrigacao", "Obrigações"], ["Solicitacao", "Solicitações"]], f.cat)}</div></div>
+    <div class="kpis">
+      ${kpiG("ab", "Abertas", n0(ab.length), `${plural(new Set(ab.map((t) => t.cli)).size, "cliente", "clientes")}`, "")}
+      ${kpiG("atr", "Atrasadas", n0(atr.length), atrM.length ? `<b>${atrM.length}</b> com multa` : "nenhuma com multa", "atr")}
+      ${kpiG("v7", "Vencem em 7 dias", n0(v7.length), v7M.length ? `<b>${v7M.length}</b> com multa` : "nenhuma com multa", "risco")}
+      ${kpiG("ent", "Entregues no prazo", pct == null ? "—" : pct + "<small>%</small>", ent.length ? `<b>${n0(noPrazo.length)}</b> de ${n0(ent.length)} em 90 dias` : "sem entregas em 90 dias", "ok")}
+      ${kpiG("semresp", "Sem responsável", n0(semResp), `nomes lidos em ${cober}% das abertas`, "")}
+    </div>
+    <div class="grade">
+      <section class="card"><div class="sec-h"><div><h2>Carga por pessoa</h2><p>Tarefas abertas em que a pessoa consta como responsável no G-Click. Clique para filtrar.</p></div></div>
+        ${legenda([["Atrasada", GC_COR.atr], ["Vence em 7 dias", GC_COR.v7], ["Em dia", GC_COR.ok]])}
+        ${resp.length ? vizBarras(resp.map((o) => ({ rot: o.k === "Sem responsável" ? o.k : curto(o.k), attr: `data-fresp="${esc(o.k)}" style="cursor:pointer"`, valor: `${o.atr ? `<b style="color:var(--atr-ink)">${o.atr}</b> / ` : ""}${o.atr + o.v7 + o.ok}`,
+          partes: [{ v: o.atr, cor: GC_COR.atr, rot: `Atrasadas${o.multa ? " (" + o.multa + " com multa)" : ""}` }, { v: o.v7, cor: GC_COR.v7, rot: "Vencem em 7 dias" }, { v: o.ok, cor: GC_COR.ok, rot: "Em dia" }] }))) : '<div class="vazio-g">Sem tarefas abertas.</div>'}
+      </section>
+      <section class="card"><div class="sec-h"><div><h2>Há quanto tempo estão atrasadas</h2><p>Atraso antigo costuma ser entrega sem baixa no G-Click ou tarefa que não se aplica mais.</p></div></div>
+        ${legenda([["Com multa", GC_COR.multa], ["Sem multa", GC_COR.sem]])}
+        ${vizColunas(idade, ["Com multa", "Sem multa"], { "Com multa": GC_COR.multa, "Sem multa": GC_COR.sem }, { H: 230 })}
+      </section>
+    </div>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Vencimentos dos próximos ${nDias} dias</h2><p>Tarefas abertas por dia de vencimento. Passe o mouse para ver quais.</p></div></div>
+      ${legenda([["Com multa", GC_COR.multa], ["Sem multa", "var(--c-ok)"]])}
+      ${vizColunas(cal, ["Com multa", "Sem multa"], { "Com multa": GC_COR.multa, "Sem multa": "var(--c-ok)" }, { H: estreito ? 260 : 230, W: estreito ? 680 : 1360, destaque: "Hoje" })}
+    </section>
+    <div class="grade b">
+      <section class="card"><div class="sec-h"><div><h2>Departamentos</h2><p>Abertas, atrasadas e pontualidade das entregas dos últimos 90 dias.</p></div></div>
+        ${tabela([["Departamento"], ["Abertas", "n"], ["Atrasadas", "n"], ["7 dias", "n hm"], ["No prazo (90d)"]],
+          deps.map((x) => `<tr data-fdep="${esc(x.k)}"><td class="forte">${esc(x.k)}</td><td class="n">${x.ab}</td><td class="n">${x.atr ? `<span class="pill atr">${x.atr}</span>` : "0"}${x.multa ? ` <span class="pill multa">${x.multa} multa</span>` : ""}</td><td class="n hm">${x.v7}</td>
+            <td>${x.pct == null ? '<span style="color:var(--ink3)">—</span>' : `<div class="pct"><span class="tr"><i style="width:${x.pct}%;background:${x.pct >= 90 ? "var(--ok-ink)" : x.pct >= 70 ? "var(--c-risco)" : "var(--c-atr)"}"></i></span><b>${x.pct}%</b></div>`}</td></tr>`))}
+      </section>
+      <section class="card"><div class="sec-h"><div><h2>Onde está o atraso</h2><p>Clientes e obrigações com mais tarefas atrasadas.</p></div>${segV("gonde", [["cli", "Clientes"], ["obr", "Obrigações"]], f.onde || "cli")}</div>
+        ${(f.onde || "cli") === "cli"
+          ? (clis.length ? vizBarras(clis.map((o) => ({ rot: o.k, attr: `data-fcli="${esc(o.k)}" style="cursor:pointer"`, partes: [{ v: o.multa, cor: GC_COR.multa, rot: "Com multa" }, { v: o.n - o.multa, cor: GC_COR.sem, rot: "Sem multa" }] }))) : '<div class="vazio-g">Nenhum cliente com atraso.</div>')
+          : (obr.length ? vizBarras(obr.map((o) => ({ rot: o.k, valor: `${o.n}<small style="color:var(--ink3);font-weight:500"> · ${o.clis} cli.</small>`, partes: [{ v: o.multa, cor: GC_COR.multa, rot: "Com multa" }, { v: o.n - o.multa, cor: GC_COR.sem, rot: "Sem multa" }] }))) : '<div class="vazio-g">Nenhuma obrigação atrasada.</div>')}
+      </section>
+    </div>
+    <section class="card" id="gc-lista" style="padding:14px 8px 4px">
+      <div class="filtros" style="padding:0 8px 10px">${chip("atr", "Atrasadas", GC_COR.atr)}${chip("multa", "Multa à vista", GC_COR.multa)}${chip("v7", "Vencem em 7 dias", GC_COR.v7)}${chip("ab", "Todas abertas")}${chip("ent", "Entregues (90d)", "var(--ok-ink)")}${chip("tarde", "Entregues com atraso")}
+        ${ativo.map(([k, r]) => `<button class="chip" data-limpa="${k}" aria-pressed="true">${esc(r)} ✕</button>`).join("")}</div>
+      ${tabela([["Tarefa"], ["Cliente"], [f.chip === "ent" || f.chip === "tarde" ? "Entregue" : "Vencimento", "n"], ["Responsável", "hm"], ["Situação"]],
+        lst.slice(0, f.lim).map((t) => `<tr ${t.ent ? `data-ent="${t.ent}"` : 'style="cursor:default"'}><td><div class="forte" style="font-size:13px">${esc(t.nome)}</div><small style="color:var(--ink3)">${esc(t.dep)}${t.comp ? " · comp. " + comp(t.comp) : ""}${t.cat === "Solicitacao" ? " · solicitação" : ""}</small></td>
+          <td>${esc(t.cli || "—")}</td>
+          <td class="n">${t.ab ? dmy(t.venc) : dmy(t.conc)}${t.ab && t.venc ? `<small style="display:block;color:${t.sit === "atr" ? "var(--atr-ink)" : "var(--ink3)"}">${t.sit === "atr" ? diff(hoje, t.venc) + "d atrasada" : diff(t.venc, hoje) === 0 ? "hoje" : "em " + diff(t.venc, hoje) + "d"}</small>` : !t.ab && t.venc && t.conc > t.venc ? `<small style="display:block;color:var(--risco-ink)">${diff(t.conc, t.venc)}d após o prazo</small>` : ""}</td>
+          <td class="hm" style="font-size:12.5px">${t.resp.length ? esc(t.resp.map(curto).join(", ")) : '<span style="color:var(--ink3)">—</span>'}</td>
+          <td>${t.ab ? `<span class="pill ${t.sit === "atr" ? "atr" : t.sit === "v7" ? "risco" : "neu"}">${esc(t.st)}</span>` : `<span class="pill ${t.venc && t.conc > t.venc ? "risco" : "ok"}">${esc(t.st)}</span>`}${t.multa ? ' <span class="pill multa">Multa</span>' : ""}</td></tr>`),
+        "Nada com esse filtro.")}
+      ${lst.length > f.lim ? `<button class="mais" id="gc-mais">Mostrar mais ${Math.min(100, lst.length - f.lim)} de ${lst.length - f.lim}</button>` : ""}
+    </section>
+    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Leitura do G-Click; a baixa e a execução continuam lá. Responsáveis são lidos aos poucos a cada coleta (${cober}% das abertas até agora).</div>`;
+
+    const vaiLista = () => $("#gc-lista").scrollIntoView({ behavior: "smooth", block: "start" });
+    $$("[data-gc]").forEach((b) => (b.onclick = () => { f.chip = b.dataset.gc; f.lim = 40; pinta(); }));
+    $$("[data-limpa]").forEach((b) => (b.onclick = () => { f[b.dataset.limpa] = ""; pinta(); }));
+    $$("[data-seg=gcat]").forEach((b) => (b.onclick = () => { f.cat = b.dataset.k; pinta(); }));
+    $$("[data-seg=gonde]").forEach((b) => (b.onclick = () => { f.onde = b.dataset.k; pinta(); }));
+    $$("[data-fresp]").forEach((b) => (b.onclick = () => { f.resp = b.dataset.fresp; f.chip = "ab"; pinta(); vaiLista(); }));
+    $$("[data-fdep]").forEach((b) => (b.onclick = () => { f.dep = b.dataset.fdep; f.chip = "atr"; pinta(); vaiLista(); }));
+    $$("[data-fcli]").forEach((b) => (b.onclick = () => { f.cli = b.dataset.fcli; f.chip = "atr"; pinta(); vaiLista(); }));
+    $$("[data-gk]").forEach((b) => (b.onclick = () => { const k = b.dataset.gk; if (k === "semresp") { f.resp = "Sem responsável"; f.chip = "ab"; } else f.chip = k; pinta(); vaiLista(); }));
+    if ($("#gc-mais")) $("#gc-mais").onclick = () => { f.lim += 100; pinta(); };
+    ligaIr($("#view")); ligaTips($("#view"));
+  };
+  pinta();
+}
+const kpiG = (k, rot, v, sub, c) => `<button class="kpi" data-gk="${k}"><div class="r">${c ? `<i style="background:var(--c-${c})"></i>` : ""}${rot}</div><div class="v">${v}</div><div class="s">${sub}</div><span class="seta">${I.seta}</span></button>`;
+function topN(l, chave, n) { const m = new Map(); l.forEach((t) => { const k = chave(t); const o = m.get(k) || { k, n: 0, l: [] }; o.n++; o.l.push(t); m.set(k, o); }); return [...m.values()].sort((a, b) => b.n - a.n).slice(0, n); }
+function resumo(l, chave) { return topN(l, chave, 4).map((o) => `${o.k}${o.n > 1 ? " (" + o.n + ")" : ""}`).join(" · ") + (new Set(l.map(chave)).size > 4 ? " …" : ""); }
+
 function navItens() {
   const it = [["inicio", "Início", I.inicio]];
-  if (temMod("tarefas")) {
-    it.push(["painel", "Painel de prazos", I.painel], ["hoje", "Tarefas", I.hoje]);
-    if (gestor()) it.push(["entrada", "Entrada", I.entrada]);
-    it.push(["modelos", "Modelos", I.lista]);
-  }
+  // Por ora o G-Click segue como motor de execução: a área de tarefas é a central de prazos (espelho, só leitura).
+  // As telas do motor próprio (Tarefas, Entrada, Modelos) voltam quando a migração do G-Click for decidida.
+  if (temMod("tarefas")) it.push(["gclick", "Central de prazos", I.painel]);
   (st.mods || []).filter((m) => m.codigo !== "tarefas").forEach((m) => it.push([m.codigo, m.nome, I[m.codigo] || I.lista]));
   return it;
 }
 
 Object.assign(MODS, {
-  inicio: telaInicio, carteira: telaCarteira, legalizacao: telaLegalizacao, captacao: telaCaptacao, comercial: telaComercial,
+  inicio: telaInicio, gclick: telaGclick, carteira: telaCarteira, legalizacao: telaLegalizacao, captacao: telaCaptacao, comercial: telaComercial,
   atendimento: telaAtendimento, financeiro: telaFinanceiro, margem: telaMargem, acessos: telaAcessos,
 });
 
