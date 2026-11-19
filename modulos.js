@@ -9,7 +9,16 @@ const n0 = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maxim
 const n1 = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 1 }));
 const dmy = (iso) => (iso ? String(iso).slice(8, 10) + "/" + String(iso).slice(5, 7) + "/" + String(iso).slice(0, 4) : "—");
 const quando = (ts) => (ts ? new Date(ts).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
-const rotulo = (s) => String(s ?? "—").replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+const ROT = { atencao: "Atenção", critico: "Crítico", vencido: "Vencido", vigente: "Vigente", ok: "OK", vermelho: "Vermelho", amarelo: "Amarelo", verde: "Verde",
+  reconsultar: "Reconsultar", consta: "Consta", nada_consta: "Nada consta", validade_a_confirmar: "Validade a confirmar", prazo_a_confirmar: "Prazo a confirmar",
+  sem_diretoria_registrada: "Sem diretoria registrada", vence_90d: "Vence em 90 dias", vence_180d: "Vence em 180 dias", em_disputa: "Em disputa", a_confirmar: "A confirmar",
+  confirmado: "Confirmado", mandato_vencido: "mandato vencido", mandato_nao_comprovado: "mandato não comprovado", mandato_em_disputa: "mandato em disputa",
+  certificacao_ausente: "certificação ausente", cnae_incompativel: "CNAE incompatível", omissao_receita: "omissão na Receita", divida_ativa: "dívida ativa",
+  parcelamento: "parcelamento", outro: "outro", sem_apontamento: "Sem apontamento", bloqueado: "Bloqueado", alto: "Alto", medio: "Médio", baixo: "Baixo",
+  sem_encaixe: "Sem encaixe", proposta_enviada: "Proposta enviada", aprovada: "Aprovada", cliente: "Cliente", suspenso: "Suspenso", busca_organica: "Busca orgânica",
+  indicacao: "Indicação", ok_sem_prazo: "OK (sem prazo)", whatsapp: "WhatsApp", site: "Site", atencao_: "Atenção" };
+const rotulo = (s) => (s == null ? "—" : ROT[s] ? ROT[s].replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : String(s).replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()));
+const humano = (txt) => String(txt ?? "").replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, (k) => ROT[k] || k.replace(/_/g, " ")).replace(/,(?=\S)/g, ", ");
 const SEMAF = {
   atr: ["vencido", "vermelho", "consta", "critico", "em_disputa", "bloqueado", "crítico"],
   risco: ["atencao", "amarelo", "reconsultar", "vence_90d", "validade_a_confirmar", "prazo_a_confirmar", "sem_diretoria_registrada", "vence_180d", "atenção", "sem_apontamento"],
@@ -54,7 +63,7 @@ Object.assign(I, {
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
 });
 
-// ---------------------------------------------------------------- INÍCIO (montado pelo perfil)
+// ---------------------------------------------------------------- INÍCIO: "Precisa de você" + pulso por módulo
 async function telaInicio() {
   const hoje = hojeISO();
   const minhas = st.base.filter((t) => t.minha);
@@ -62,66 +71,96 @@ async function telaInicio() {
   const h = +new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
   cabecalho("Início", extenso(hoje));
   const outros = (st.mods || []).filter((x) => !["tarefas", "acessos"].includes(x.codigo));
-  const prox = m.atr.filter((t) => t.gera_multa)[0] || m.atr[0] || m.risco[0];
   $("#view").innerHTML = `
-    <div class="saud"><div><h2>${h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"}, ${esc(limpa(st.eu.nome).split(" ")[0])}.</h2>
-      <p>${m.atr.length ? `Você tem <b>${plural(m.atr.length, "tarefa atrasada", "tarefas atrasadas")}</b>${m.multaAtr ? `, <b>${m.multaAtr} com multa</b>` : ""}, e <b>${m.risco.length}</b> vencem em até 3 dias.` : m.risco.length ? `Nada seu atrasado. <b>${plural(m.risco.length, "tarefa vence", "tarefas vencem")}</b> em até 3 dias.` : "Nada seu atrasado e nada vencendo nos próximos 3 dias."}</p></div>
-      ${prox ? `<button class="btn s" id="comecar">Abrir a mais urgente ${I.seta}</button>` : ""}</div>
-    <div class="kpis k4">
-      ${kpiM("Minhas abertas", m.ab.length, `<b>${m.andamento}</b> em andamento`, "", "hoje")}
-      ${kpiM("Atrasadas", m.atr.length, m.multaAtr ? `<b>${m.multaAtr}</b> com multa` : "nenhuma com multa", "atr", "hoje")}
-      ${kpiM("Vencem em 3 dias", m.risco.length, m.multaRisco ? `<b>${m.multaRisco}</b> com multa` : "nenhuma com multa", "risco", "hoje")}
-      ${kpiM("Entregues no prazo", m.pct == null ? "—" : m.pct + "<small>%</small>", m.conc30.length ? `<b>${m.noPrazo.length}</b> de ${m.conc30.length} em 30 dias` : "sem entregas em 30 dias", "ok", "painel")}
-    </div>
-    ${outros.length ? `<div class="sec-h" style="margin:22px 0 10px"><div><h2>Seus módulos</h2><p>O que pede atenção em cada área que você acessa.</p></div></div>
-    <div class="mods">${outros.map((x) => `<button class="mod-c" data-ir="${x.codigo}" id="mc-${x.codigo}"><div class="mh">${I[x.codigo] || ""}<b>${esc(x.nome)}</b>${x.nivel === "leitura" ? '<span class="pill neu">leitura</span>' : ""}</div><div class="mb"><div class="sk" style="height:58px"></div></div></button>`).join("")}</div>` : ""}`;
-  if (prox) $("#comecar").onclick = () => abrir(prox.id);
+    <div class="ini-h"><h2>${h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"}, ${esc(limpa(st.eu.nome).split(" ")[0])}.</h2><p id="ini-frase">Juntando o que pede atenção nas suas áreas…</p></div>
+    <div class="ini">
+      <section class="card ini-f"><div class="sec-h"><div><h2>Precisa de você</h2><p>Do mais grave ao menos grave. Clique para ir direto ao item.</p></div></div>
+        <div id="feed"><div class="sk" style="height:260px"></div></div></section>
+      <aside class="ini-p"><div class="ini-pt">Pulso</div><div id="pulso">
+        <button class="pl" data-ir="hoje"><span class="pn ${m.atr.length ? "t-atr" : ""}">${m.atr.length}</span><span class="pr"><b>Minhas tarefas atrasadas</b><small>${m.ab.length} abertas · ${m.risco.length} vencem em 3 dias</small></span></button>
+        ${outros.map((x) => `<button class="pl" data-ir="${x.codigo}" id="pl-${x.codigo}"><span class="pn"><i class="sk" style="display:block;width:34px;height:24px"></i></span><span class="pr"><b>${esc(x.nome)}</b><small>carregando…</small></span></button>`).join("")}
+      </div></aside>
+    </div>`;
   ligaIr();
-  const linha = (rot, v, c) => `<div class="ml"><span>${rot}</span><b class="${c ? "t-" + c : ""}">${v}</b></div>`;
-  const resumo = {
-    carteira: async () => { const d = await rpcMod("app_mod_carteira"); return linha("Clientes no seu escopo", d.length) + linha("Com tarefa atrasada", d.filter((x) => x.atr > 0).length, d.some((x) => x.atr) ? "atr" : "") + linha("Com bloqueio aberto", d.filter((x) => x.bloqueios > 0).length, d.some((x) => x.bloqueios) ? "risco" : ""); },
-    legalizacao: async () => { const d = await rpcMod("app_mod_legalizacao"); const cv = d.certificacoes.filter((c) => ["vencido", "critico"].includes(c.semaforo)).length; const mv = d.mandatos.filter((c) => ["vencido", "vence_90d", "em_disputa"].includes(c.situacao)).length; const ce = d.certidoes.reduce((a, c) => a + c.consta, 0);
-      return linha("Certificações vencidas ou críticas", cv, cv ? "atr" : "") + linha("Mandatos vencidos ou em 90 dias", mv, mv ? "atr" : "") + linha("Certidões positivas (consta)", ce, ce ? "atr" : ""); },
-    captacao: async () => { const d = await rpcMod("app_mod_captacao"); const j = d.janelas; const q15 = j.filter((x) => x.dias_para_fechar != null && x.dias_para_fechar <= 15).length;
-      return linha("Janelas abertas com aderência", j.length) + linha("Fecham em até 15 dias", q15, q15 ? "risco" : "") + linha("Com encaixe alto", j.filter((x) => x.altos > 0).length, "ok"); },
-    comercial: async () => { const d = await rpcMod("app_mod_comercial"); const t = d.ganho.find((g) => g.origem === "TOTAL") || {}; const ab = d.deals.filter((x) => !x.contrato_em && !x.perdido_em).length;
-      return linha("Negócios em aberto", ab) + linha("Valor em aberto (ano)", brl(t.valor_em_aberto_ano)) + linha("Aprovação de propostas", t.pct_aprovacao == null ? "—" : t.pct_aprovacao + "%"); },
-    atendimento: async () => { const d = await rpcMod("app_mod_atendimento"); const ab = d.setores.reduce((a, s) => a + s.abertos, 0), par = d.setores.reduce((a, s) => a + s.parados_24h, 0);
-      return linha("Atendimentos abertos", ab) + linha("Parados há mais de 24h", par, par ? "atr" : "") + linha("Atualizado em", quando(d.coletado_em)); },
-    financeiro: async () => { const d = await rpcMod("app_mod_financeiro"); const i = d.indicadores || {}; const mes = (d.mensal || []).find((x) => String(x.mes).slice(0, 7) === hoje.slice(0, 7)) || {};
-      return linha("Recorrente (MRR)", brl(i.mrr)) + linha("A receber neste mês", brl(mes.a_receber), mes.a_receber > 0 ? "risco" : "") + linha("Fôlego de caixa", i.folego_meses == null ? "—" : n1(i.folego_meses) + " mês", i.folego_meses < 1 ? "atr" : ""); },
+  const itens = [];
+  // tarefas próprias
+  m.atr.slice(0, 4).forEach((t) => itens.push({ sev: t.gera_multa ? 0 : 1, mod: "Tarefas", tit: limpa(t.titulo), ctx: `${t.entidade || "Sem cliente"} · venceu ${dm(t.vencimento)}${t.gera_multa ? " · gera multa" : ""}`, acao: () => abrir(t.id) }));
+  if (m.atr.length > 4) itens.push({ sev: 1, mod: "Tarefas", tit: `Mais ${m.atr.length - 4} tarefas suas atrasadas`, ctx: "Abrir a lista filtrada", acao: () => irPara("hoje", { chip: "atr" }) });
+  const pulso = (cod, n, sub, cls) => { const b = $(`#pl-${cod}`); if (b) { $(".pn", b).className = "pn " + (cls ? "t-" + cls : ""); $(".pn", b).textContent = n; $("small", b).textContent = sub; } };
+  const fontes = {
+    carteira: async () => { const d = (await rpcMod("app_mod_carteira")).filter((x) => x.segmento === "osc");
+      const atr = d.filter((x) => x.atr > 0), verm = d.filter((x) => x.semaforo === "vermelho");
+      pulso("carteira", verm.length, `OSCs com trilha vermelha de ${d.length}`, verm.length ? "atr" : "");
+      if (atr.length) itens.push({ sev: 2, mod: "Carteira", tit: `${plural(atr.length, "cliente com tarefa atrasada", "clientes com tarefa atrasada")}`, ctx: atr.slice(0, 5).map((x) => x.sigla).join(", ") + (atr.length > 5 ? "…" : ""), acao: () => { st.fc = { chip: "atr", seg: "osc" }; irPara("carteira"); } }); },
+    legalizacao: async () => { const d = await rpcMod("app_mod_legalizacao");
+      const cv = d.certificacoes.filter((c) => ["vencido", "critico"].includes(c.semaforo)), mv = d.mandatos.filter((c) => ["vencido", "em_disputa", "vence_90d"].includes(c.situacao));
+      pulso("legalizacao", cv.length + mv.length, `${plural(cv.length, "certificação", "certificações")} · ${plural(mv.length, "mandato", "mandatos")} em alerta`, cv.length + mv.length ? "atr" : "");
+      cv.forEach((c) => itens.push({ sev: c.semaforo === "vencido" ? 0 : 1, mod: "Legalização", tit: `${c.tipo} ${c.semaforo === "vencido" ? "vencida" : "vence em " + c.dias + " dias"}`, ctx: `${c.sigla} · validade ${dmy(c.validade)}`, acao: () => fichaEntidade(c.entidade_id) }));
+      mv.forEach((x) => itens.push({ sev: x.situacao === "vence_90d" ? 2 : 0, mod: "Legalização", tit: `Mandato ${x.situacao === "vence_90d" ? "vence em até 90 dias" : x.situacao === "em_disputa" ? "em disputa" : "vencido"}`, ctx: `${x.sigla}${x.fim ? " · fim " + dmy(x.fim) : ""}`, acao: () => fichaEntidade(x.entidade_id) })); },
+    captacao: async () => { const d = await rpcMod("app_mod_captacao");
+      const ad = d.janelas.map((j) => ({ ...j, bons: j.oscs.filter((o) => ["alto", "medio"].includes(o.encaixe)) })).filter((j) => j.bons.length);
+      const q = ad.filter((j) => j.dias_para_fechar != null && j.dias_para_fechar <= 15);
+      pulso("captacao", q.length, `editais com OSC aderente fecham em 15 dias`, q.length ? "risco" : "");
+      q.forEach((j) => itens.push({ sev: j.dias_para_fechar <= 7 ? 1 : 2, mod: "Captação", tit: j.titulo.replace(/\s*—\s*objeto a confirmar/, ""), ctx: `fecha ${dm(j.fecha)} (${j.dias_para_fechar}d) · ${j.bons.slice(0, 4).map((o) => o.sigla).join(", ")}${j.bons.length > 4 ? " +" + (j.bons.length - 4) : ""}`, acao: () => irPara("captacao") })); },
+    comercial: async () => { const d = await rpcMod("app_mod_comercial"); const ab = d.deals.filter((x) => !x.contrato_em && !x.perdido_em);
+      const parados = ab.filter((x) => x.ultimo_evento && diff(hoje, x.ultimo_evento) > 14);
+      pulso("comercial", ab.length, `negócios em aberto · ${parados.length} sem movimento há 14 dias`, "");
+      if (parados.length) itens.push({ sev: 2, mod: "Comercial", tit: `${plural(parados.length, "proposta parada", "propostas paradas")} há mais de 14 dias`, ctx: parados.slice(0, 5).map((x) => x.deal).join(", "), acao: () => irPara("comercial") }); },
+    atendimento: async () => { const d = await rpcMod("app_mod_atendimento"); const par = d.setores.reduce((a, s) => a + s.parados_24h, 0);
+      pulso("atendimento", par, `conversas paradas há mais de 24h`, par ? "atr" : "");
+      d.setores.filter((s) => s.parados_24h > 0).forEach((s) => itens.push({ sev: s.parados_24h > 10 ? 1 : 2, mod: "Atendimento", tit: `${s.parados_24h} conversas paradas há mais de 24h`, ctx: String(s.setor).replace(/^\S+\s/, ""), acao: () => irPara("atendimento") })); },
+    financeiro: async () => { const d = await rpcMod("app_mod_financeiro"); const i = d.indicadores || {};
+      pulso("financeiro", i.folego_meses == null ? "—" : n1(i.folego_meses), `meses de fôlego de caixa · MRR ${brl(i.mrr)}`, i.folego_meses < 1 ? "atr" : "");
+      if (i.folego_meses != null && i.folego_meses < 1) itens.push({ sev: 1, mod: "Financeiro", tit: `Caixa cobre ${n1(i.folego_meses)} mês de despesa`, ctx: `saldo ${brl(i.saldo_bancos)} · despesa média ${brl(i.despesa_media_3m)}`, acao: () => irPara("financeiro") });
+      (d.inadimplencia || []).forEach((x) => itens.push({ sev: x.dias > 30 ? 1 : 2, mod: "Financeiro", tit: `${x.cliente} em atraso`, ctx: `${brl(x.em_aberto)} · ${x.dias} dias`, acao: () => irPara("financeiro") })); },
     margem: async () => { const d = await rpcMod("app_mod_margem"); const r = d.resumo || {};
-      return linha("Contratos críticos (horas > 110%)", r.criticos, r.criticos ? "atr" : "") + linha("Em atenção", r.atencao, r.atencao ? "risco" : "") + linha("Sem apontamento confiável", r.sem_apontamento, r.sem_apontamento ? "risco" : ""); },
+      pulso("margem", r.criticos ?? 0, `contratos acima de 110% das horas pagas`, r.criticos ? "atr" : "");
+      if (r.criticos) itens.push({ sev: 2, mod: "Margem", tit: `${r.criticos} contratos consomem mais horas do que o honorário paga`, ctx: d.carteira.filter((x) => x.status === "critico").slice(0, 5).map((x) => x.sigla || x.grupo).join(", "), acao: () => irPara("margem") }); },
   };
-  outros.forEach(async (x) => {
-    const el = $(`#mc-${x.codigo} .mb`); if (!el || !resumo[x.codigo]) { if (el) el.innerHTML = ""; return; }
-    try { el.innerHTML = await resumo[x.codigo](); } catch (e) { el.innerHTML = `<div class="ml"><span>${esc(e.message)}</span></div>`; }
-  });
+  await Promise.all(outros.map((x) => (fontes[x.codigo] ? fontes[x.codigo]().catch((e) => pulso(x.codigo, "!", e.message, "atr")) : null)));
+  if (st.view !== "inicio") return;
+  itens.sort((a, b) => a.sev - b.sev);
+  const graves = itens.filter((i) => i.sev <= 1).length;
+  $("#ini-frase").innerHTML = itens.length ? `<b>${plural(itens.length, "ponto pede", "pontos pedem")}</b> sua atenção${graves ? `, <b>${graves}</b> ${graves === 1 ? "grave" : "graves"}` : ""}.` : "Nada pedindo atenção agora.";
+  let lim = 12;
+  const pinta = () => {
+    $("#feed").innerHTML = itens.length ? `<div class="fd">${itens.slice(0, lim).map((it, k) => `<button class="fi s${it.sev}" data-k="${k}"><span class="fb"></span><span class="ft"><b>${esc(it.tit)}</b><small>${esc(it.ctx || "")}</small></span><span class="fm">${esc(it.mod)}</span>${I.seta}</button>`).join("")}</div>
+      ${itens.length > lim ? `<button class="mais" id="fd-mais">Mostrar mais ${itens.length - lim}</button>` : ""}` : `<div class="vazio">${I.festa}<h3>Tudo em ordem</h3><div>Nenhum ponto de atenção nas suas áreas.</div></div>`;
+    $$(".fi").forEach((b) => (b.onclick = () => itens[+b.dataset.k].acao()));
+    if ($("#fd-mais")) $("#fd-mais").onclick = () => { lim = itens.length; pinta(); };
+  };
+  pinta();
 }
 
 // ---------------------------------------------------------------- CARTEIRA
 async function telaCarteira() {
-  cabecalho("Carteira", nivelMod("carteira") && st.eu.papel !== "admin" && st.eu.papel !== "lider" ? "Clientes em que você é dono ou substituto" : "Todos os clientes ativos");
+  cabecalho("Carteira", st.eu.papel !== "admin" && st.eu.papel !== "lider" ? "Clientes em que você é dono ou substituto" : "Todos os clientes ativos");
   carregandoView();
   let d; try { d = await rpcMod("app_mod_carteira"); } catch (e) { return erroView(e); }
-  const f = st.fc || (st.fc = { chip: "todas" });
+  const f = st.fc || (st.fc = { chip: "todas", seg: "osc" });
+  if (!f.seg) f.seg = "osc";
   const verFin = d.some((x) => x.honorario != null);
-  const filtros = { todas: () => true, atr: (x) => x.atr > 0, bloq: (x) => x.bloqueios > 0, cert: (x) => x.cert_alerta > 0, mand: (x) => x.mandato && !["vigente"].includes(x.mandato), verm: (x) => x.semaforo === "vermelho" };
+  const peso = (x) => (x.semaforo === "vermelho" ? 4 : 0) + x.atr * 2 + x.bloqueios * 2 + (["vencido", "em_disputa"].includes(x.mandato) ? 3 : 0) + x.cert_alerta;
+  const filtros = { todas: () => true, atr: (x) => x.atr > 0, bloq: (x) => x.bloqueios > 0, cert: (x) => x.cert_alerta > 0, mand: (x) => x.mandato && x.mandato !== "vigente", verm: (x) => x.semaforo === "vermelho" };
   const pinta = () => {
-    const l = d.filter(filtros[f.chip]).filter((x) => casa(x, ["sigla", "razao_social", "municipio", "meus_deptos"]));
-    const chip = (k, rot, c) => `<button class="chip" data-fc="${k}" aria-pressed="${f.chip === k}">${c ? `<i style="background:var(--c-${c})"></i>` : ""}${rot} <b>${d.filter(filtros[k]).length}</b></button>`;
+    const seg = d.filter((x) => (f.seg === "osc" ? x.segmento === "osc" : x.segmento !== "osc"));
+    const l = seg.filter(filtros[f.chip]).filter((x) => casa(x, ["sigla", "razao_social", "municipio", "meus_deptos"])).sort((a, b) => peso(b) - peso(a) || a.sigla.localeCompare(b.sigla));
+    const chip = (k, rot, c) => `<button class="chip" data-fc="${k}" aria-pressed="${f.chip === k}">${c ? `<i style="background:var(--c-${c})"></i>` : ""}${rot} <b>${seg.filter(filtros[k]).length}</b></button>`;
+    const nOsc = d.filter((x) => x.segmento === "osc").length;
     $("#view").innerHTML = `
-      <div class="filtros">${chip("todas", "Todos")}${chip("atr", "Com tarefa atrasada", "atr")}${chip("verm", "Trilha vermelha", "atr")}${chip("bloq", "Com bloqueio", "risco")}${chip("cert", "Certificação a vencer", "risco")}${chip("mand", "Mandato com alerta", "risco")}</div>
-      <div class="card" style="padding:6px 10px">${tabela(
-        [["Cliente"], ["Trilha de conformidade"], ["Tarefas", "n"], ["Atras.", "n"], ["Bloq.", "n hm"], ["Mandato", "hm"], ["WhatsApp 30d", "n hm"]].concat(verFin ? [["Honorário", "n hm"], ["Horas", "hm"]] : []),
-        l.map((x) => `<tr data-ent="${x.id}"><td><div class="forte">${esc(x.sigla)}</div><div style="font-size:12px;color:var(--ink3);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.razao_social || "")}</div></td>
-          <td>${x.semaforo ? pillSem(x.semaforo, rotulo(x.semaforo)) : ""} <span style="font-size:12px;color:var(--ink2)">${esc(x.proximo_passo || "")}</span></td>
-          <td class="n">${x.abertas}</td><td class="n">${x.atr ? `<span class="pill atr">${x.atr}</span>` : "0"}</td><td class="n hm">${x.bloqueios ? `<span class="pill risco">${x.bloqueios}</span>` : "0"}</td>
-          <td class="hm">${x.mandato ? pillSem(x.mandato) : "—"}</td><td class="n hm">${x.tickets_30d}</td>
-          ${verFin ? `<td class="n hm">${brl(x.honorario)}</td><td class="hm">${x.margem_status ? pillSem(x.margem_status) : "—"}</td>` : ""}</tr>`),
+      <div class="sec-h" style="margin-bottom:12px"><div></div>${segV("cseg", [["osc", `OSCs · ${nOsc}`], ["outros", `Empresas e internos · ${d.length - nOsc}`]], f.seg)}</div>
+      <div class="filtros">${chip("todas", "Todos")}${chip("verm", "Trilha vermelha", "atr")}${chip("atr", "Com tarefa atrasada", "atr")}${chip("bloq", "Com bloqueio", "risco")}${chip("mand", "Mandato com alerta", "risco")}${chip("cert", "Certificação a vencer", "risco")}</div>
+      <div class="card" style="padding:4px 8px">${tabela(
+        [["Cliente"], ["Situação"], ["Tarefas", "n"], ["Mandato", "hm"], ["WhatsApp 30d", "n hm"]].concat(verFin ? [["Honorário", "n hm"], ["Horas", "hm"]] : []),
+        l.map((x) => `<tr data-ent="${x.id}"><td class="cl-c"><b>${esc(x.sigla)}</b><small>${esc(x.razao_social || "")}</small></td>
+          <td class="si-c">${x.semaforo ? pillSem(x.semaforo) : '<span class="pill neu">Sem trilha</span>'}${x.bloqueios ? ` <span class="pill risco">${plural(x.bloqueios, "bloqueio", "bloqueios")}</span>` : ""}${x.proximo_passo ? `<small>${esc(humano(x.proximo_passo))}</small>` : ""}</td>
+          <td class="n">${x.abertas}${x.atr ? ` <span class="pill atr">${x.atr} atras.</span>` : ""}</td>
+          <td class="hm">${x.mandato ? pillSem(x.mandato) : '<span style="color:var(--ink3)">—</span>'}</td><td class="n hm">${x.tickets_30d || '<span style="color:var(--ink3)">0</span>'}</td>
+          ${verFin ? `<td class="n hm">${brl(x.honorario)}</td><td class="hm">${x.margem_status ? pillSem(x.margem_status) : '<span style="color:var(--ink3)">—</span>'}</td>` : ""}</tr>`),
         "Nenhum cliente com esse filtro.")}</div>
-      <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">${plural(l.length, "cliente", "clientes")}. Clique para abrir a ficha.</div>`;
+      <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">${plural(l.length, "cliente", "clientes")}, os que pedem mais atenção primeiro. Clique para abrir a ficha.</div>`;
     $$("[data-fc]").forEach((b) => (b.onclick = () => { f.chip = b.dataset.fc; pinta(); }));
+    $$("[data-seg=cseg]").forEach((b) => (b.onclick = () => { f.seg = b.dataset.k; f.chip = "todas"; pinta(); }));
     ligaIr($("#view"));
   };
   pinta();
@@ -139,7 +178,7 @@ async function fichaEntidade(id) {
     <div class="gp">${e.situacao_receita ? `<span class="pill ${e.situacao_receita === "ATIVA" ? "ok" : "atr"}">Receita: ${esc(e.situacao_receita)}</span>` : ""}${d.bloqueios.length ? `<span class="pill atr">${plural(d.bloqueios.length, "bloqueio", "bloqueios")}</span>` : ""}${d.mandato ? pillSem(d.mandato.situacao, "Mandato: " + rotulo(d.mandato.situacao)) : ""}</div>`;
   $(".gx", g).onclick = () => fecharGaveta();
   $(".gb", g).innerHTML =
-    bloco("Trilha de conformidade", mini(null, d.trilha.map((t) => `<tr style="cursor:default"><td class="forte">${t.ordem}. ${esc(t.etapa)}</td><td>${pillSem(t.status)}</td><td style="font-size:12.5px;color:var(--ink2)">${esc(t.proximo_passo || "")}</td></tr>`), "Trilha ainda não medida.")) +
+    bloco("Trilha de conformidade", mini(null, d.trilha.map((t) => `<tr style="cursor:default"><td class="forte">${t.ordem}. ${esc(t.etapa)}</td><td>${pillSem(t.status)}</td><td style="font-size:12.5px;color:var(--ink2)">${esc(humano(t.proximo_passo || ""))}</td></tr>`), "Trilha ainda não medida.")) +
     (d.bloqueios.length ? bloco("Bloqueios abertos", mini(null, d.bloqueios.map((b) => `<tr style="cursor:default"><td class="forte">${esc(rotulo(b.motivo))}</td><td style="font-size:12.5px">${esc(b.detalhe || "")}</td><td class="n">${dmy(b.desde)}</td></tr>`))) : "") +
     bloco("Tarefas abertas", mini(null, d.tarefas.map((t) => `<tr data-tid="${t.id}"><td><div class="forte" style="font-size:13px">${esc(limpa(t.titulo))}</div><div style="font-size:12px;color:var(--ink3)">${esc(t.departamento || "")} · ${esc(curto(t.responsavel))}</div></td><td class="n"><span class="pill ${t.vencimento && t.vencimento < hojeISO() ? "atr" : "neu"}">${t.vencimento ? dm(t.vencimento) : "sem prazo"}</span>${t.gera_multa ? ' <span class="pill multa">Multa</span>' : ""}</td></tr>`), "Nenhuma tarefa aberta que você possa ver.")) +
     bloco("Responsáveis na Utarget", mini(null, d.responsaveis.map((r) => `<tr style="cursor:default"><td class="forte">${esc(r.departamento)}</td><td>${esc(curto(r.responsavel))}</td><td style="color:var(--ink3);font-size:12px">${r.substituto ? "subst. " + esc(curto(r.substituto)) : ""}</td></tr>`), "Carteira sem dono definido.")) +
@@ -190,28 +229,33 @@ async function telaLegalizacao() {
 
 // ---------------------------------------------------------------- CAPTAÇÃO
 async function telaCaptacao() {
-  cabecalho("Captação", "Janelas abertas com aderência a clientes da carteira");
+  cabecalho("Captação", "Editais abertos com OSCs da carteira que se encaixam");
   carregandoView();
   let d; try { d = await rpcMod("app_mod_captacao"); } catch (e) { return erroView(e); }
-  const j = d.janelas.filter((x) => casa(x, ["titulo"]) || x.oscs.some((o) => String(o.sigla).toLowerCase().includes(qMod())));
-  const q15 = d.janelas.filter((x) => x.dias_para_fechar != null && x.dias_para_fechar <= 15);
+  const todas = d.janelas.map((j) => ({ ...j, titulo: j.titulo.replace(/\s*—\s*objeto a confirmar/, " (objeto a confirmar)"), bons: j.oscs.filter((o) => ["alto", "medio"].includes(o.encaixe)), resto: j.oscs.filter((o) => !["alto", "medio"].includes(o.encaixe)) }))
+    .filter((j) => casa(j, ["titulo"]) || j.oscs.some((o) => String(o.sigla).toLowerCase().includes(qMod())));
+  const com = todas.filter((j) => j.bons.length).sort((a, b) => (a.dias_para_fechar ?? 999) - (b.dias_para_fechar ?? 999) || b.bons.length - a.bons.length);
+  const sem = todas.filter((j) => !j.bons.length);
+  const q15 = com.filter((x) => x.dias_para_fechar != null && x.dias_para_fechar <= 15);
+  const chipO = (o) => `<button class="osc ${o.encaixe}" data-ent="${o.entidade_id}" title="${esc(humano(o.motivo || ""))}"><b>${esc(o.sigla)}</b><span>${esc(rotulo(o.encaixe))}${o.motivo ? " · " + esc(humano(o.motivo)) : ""}</span></button>`;
+  const card = (x) => `<div class="card cap">
+      <div class="cap-h"><a class="cap-t" href="${esc(x.url || "#")}" target="_blank" rel="noopener">${esc(x.titulo)}</a>
+        <span class="pill ${x.dias_para_fechar == null ? "neu" : x.dias_para_fechar <= 7 ? "atr" : x.dias_para_fechar <= 15 ? "risco" : "ok"}">${x.fecha ? "Fecha " + dm(x.fecha) + (x.dias_para_fechar != null ? ` · ${x.dias_para_fechar} dias` : "") : "Prazo a confirmar"}</span></div>
+      ${x.bons.length ? `<div class="cap-r">${plural(x.bons.length, "OSC se encaixa", "OSCs se encaixam")}</div><div class="cap-o">${x.bons.map(chipO).join("")}</div>` : ""}
+      ${x.resto.length ? `<details class="cap-d"><summary>${plural(x.resto.length, "OSC sem encaixe ou bloqueada", "OSCs sem encaixe ou bloqueadas")}</summary><div class="cap-o">${x.resto.map(chipO).join("")}</div></details>` : ""}
+    </div>`;
   $("#view").innerHTML = `
     <div class="kpis k4">
-      ${kpiM("Janelas abertas", d.janelas.length, "com ao menos uma OSC aderente")}
+      ${kpiM("Editais com OSC aderente", com.length, `de ${d.janelas.length} abertos no radar`)}
       ${kpiM("Fecham em até 15 dias", q15.length, "decidir agora se concorre", q15.length ? "risco" : "")}
-      ${kpiM("Com encaixe alto", d.janelas.filter((x) => x.altos > 0).length, "perfil e certificações batem", "ok")}
-      ${kpiM("Editais a confirmar", d.a_confirmar ?? "—", `coleta: ${quando(d.coleta)}`)}
+      ${kpiM("OSCs com encaixe alto", new Set(com.flatMap((j) => j.bons.filter((o) => o.encaixe === "alto").map((o) => o.sigla))).size, "perfil e certificações batem", "ok")}
+      ${kpiM("Editais a confirmar", d.a_confirmar ?? "—", `última coleta ${quando(d.coleta)}`)}
     </div>
-    <div class="cap-l">${j.map((x) => `
-      <div class="card cap">
-        <div class="cap-h"><div><a class="cap-t" href="${esc(x.url || "#")}" target="_blank" rel="noopener">${esc(x.titulo)}</a></div>
-          <span class="pill ${x.dias_para_fechar == null ? "neu" : x.dias_para_fechar <= 7 ? "atr" : x.dias_para_fechar <= 15 ? "risco" : "ok"}">${x.fecha ? "fecha " + dm(x.fecha) + (x.dias_para_fechar != null ? ` · ${x.dias_para_fechar}d` : "") : "prazo a confirmar"}</span></div>
-        <div class="cap-o">${x.oscs.map((o) => `<button class="osc ${o.encaixe}" data-ent="${o.entidade_id}" title="${esc(o.motivo || "")}"><b>${esc(o.sigla)}</b><span>${esc(rotulo(o.encaixe))}${o.motivo ? " · " + esc(o.motivo) : ""}</span></button>`).join("")}</div>
-      </div>`).join("") || '<div class="vazio"><h3>Nenhuma janela</h3><div>Sem edital aberto com aderência à carteira.</div></div>'}</div>
-    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Edital só entra em projeto com o edital/TR oficial aberto. Encaixe é leitura do radar; elegibilidade se confirma no texto do edital.</div>`;
+    <div class="cap-l">${com.map(card).join("") || '<div class="vazio"><h3>Nenhum edital com OSC aderente</h3><div>O radar não achou encaixe na carteira agora.</div></div>'}</div>
+    ${sem.length ? `<details class="cap-sem"><summary>${plural(sem.length, "edital aberto sem OSC aderente", "editais abertos sem OSC aderente")}</summary><div class="cap-l">${sem.map(card).join("")}</div></details>` : ""}
+    <div style="color:var(--ink3);font-size:12.5px;margin:12px 4px">O encaixe é leitura do radar. A elegibilidade só se confirma no edital ou TR oficial aberto.</div>`;
   ligaIr($("#view"));
 }
-
 // ---------------------------------------------------------------- COMERCIAL
 const ETAPAS = ["proposta_enviada", "aprovada", "minuta", "assinatura", "contrato", "perdido"];
 async function telaComercial() {

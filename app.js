@@ -1,4 +1,4 @@
-// Cockpit Utarget — v0.5 (19/11/2026): app de tarefas vira cockpit com módulos por perfil (modulos.js). Dados e acesso: Supabase utarget-dados (RLS + RPCs).
+// Cockpit Utarget — v0.6 (19/11/2026): app de tarefas vira cockpit com módulos por perfil (modulos.js). Dados e acesso: Supabase utarget-dados (RLS + RPCs).
 const SUPABASE_URL = "https://okgxketgsyggzpvnapup.supabase.co";
 const SUPABASE_KEY = "sb_publishable_fwAjsYH7ZOV177xeq0O86g_INBxCAY9"; // chave pública; o acesso é controlado pelo banco
 const sb = window.__mockSb || supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { flowType: "pkce", persistSession: true, detectSessionInUrl: true } });
