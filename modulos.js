@@ -357,6 +357,9 @@ async function telaMargem() {
   const comHoras = d.grupos.filter((x) => x.resultado != null);
   const res = comHoras.reduce((a, x) => a + +x.resultado, 0), neg = comHoras.filter((x) => x.resultado < 0);
   const dep0 = d.departamentos[0] || {};
+  const custoTot = d.departamentos.reduce((a, k) => a + +k.custo_direto, 0) + +(dep0.custo_comum_total || 0);
+  const recTot = d.grupos.reduce((a, x) => a + +(x.receita_liquida || 0), 0);
+  const semDono = custoTot - comHoras.reduce((a, x) => a + +x.custo_total, 0);
   const mg = (v) => (v == null ? "—" : `<span class="${v < 0 ? "t-atr" : v < 40 ? "t-risco" : "t-ok"}">${n1(v)}%</span>`);
   const linha = (x) => {
     const ab = abertos.has(x.grupo), top = (x.deptos || [])[0];
@@ -373,7 +376,7 @@ async function telaMargem() {
   };
   $("#view").innerHTML = `
     <div class="kpis">
-      ${kpiM("Resultado da carteira", brl(res), `honorário líquido de DAS menos custo, ${comp(r.competencia_horas)}`, res < 0 ? "atr" : "ok")}
+      ${kpiM("Resultado da operação", brl(recTot - custoTot), `receita líquida ${brl(recTot)} − custo de servir ${brl(custoTot)} · ${brl(semDono)} em horas fora dos grupos`, recTot - custoTot < 0 ? "atr" : "ok")}
       ${kpiM("Grupos no prejuízo", neg.length, neg.slice(0, 3).map((x) => x.grupo).join(", ") || "nenhum", neg.length ? "atr" : "ok")}
       ${kpiM("Abaixo da margem-alvo", comHoras.filter((x) => x.status === "atencao").length, "positivos, mas abaixo de 40%", "risco")}
       ${kpiM("Custo comum por hora", brl(dep0.custo_comum_hora), `estrutura e gestão: ${brl(dep0.custo_comum_total)}/mês`)}
