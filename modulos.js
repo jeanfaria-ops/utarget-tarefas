@@ -450,8 +450,9 @@ async function telaAtendimento() {
 async function telaFinanceiro() {
   cabecalho("Financeiro", "Caixa e recebimentos da Utarget");
   carregandoView();
-  let d; try { d = await rpcMod("app_mod_financeiro"); } catch (e) { return erroView(e); }
+  let d, cob; try { [d, cob] = await Promise.all([rpcMod("app_mod_financeiro"), rpcMod("app_fin_cobertura").catch(() => ({}))]); } catch (e) { return erroView(e); }
   const i = d.indicadores || {}; const hoje = hojeISO();
+  const semInad = cob && cob.receber_por_cliente === false; // fluxo de caixa não tem contas a receber por cliente: R$ 0 seria falso
   const mes = (d.mensal || []).find((x) => String(x.mes).slice(0, 7) === hoje.slice(0, 7)) || {};
   const ms0 = (d.mensal || []).filter((x) => String(x.mes).slice(0, 7) <= hoje.slice(0, 7));
   const ini = ms0.findIndex((x) => +x.faturado || +x.recebido || +x.pago); // estética-usabilidade: sem meses vazios antes do primeiro dado
@@ -463,7 +464,7 @@ async function telaFinanceiro() {
       ${kpiM("Recorrente (MRR)", brl(i.mrr), `${i.contratos_ativos ?? "—"} contratos · ticket ${brl(i.ticket_medio)}`)}
       ${kpiM("Recebido no mês", brl(i.recebido_mes), `pago no mês ${brl(i.pago_mes)}`, "ok")}
       ${kpiM("A receber no mês", brl(mes.a_receber), `faturado ${brl(mes.faturado)}`, mes.a_receber > 0 ? "risco" : "")}
-      ${kpiM("Inadimplência", brl(i.inadimplencia), `${i.clientes_inadimplentes ?? 0} clientes`, i.inadimplencia > 0 ? "atr" : "ok")}
+      ${semInad ? kpiM("Inadimplência", "—", "sem contas a receber por cliente na base", "") : kpiM("Inadimplência", brl(i.inadimplencia), `${i.clientes_inadimplentes ?? 0} clientes`, i.inadimplencia > 0 ? "atr" : "ok")}
       ${kpiM("Saldo em bancos", brl(i.saldo_bancos), `fôlego ${n1(i.folego_meses)} mês · em ${dmy(i.saldo_em)}`, i.folego_meses < 1 ? "atr" : "")}
     </div>
     <div class="grade">
@@ -475,7 +476,7 @@ async function telaFinanceiro() {
         <section class="card"><div class="sec-h"><div><h2>Concentração</h2><p>${pct2 >= 50 ? `<b style="color:var(--atr-ink)">${top2.map((c) => esc(c.cliente)).join(" e ")} somam ${n1(pct2)}% do recorrente.</b> Perder um deles muda o caixa.` : "Maiores contratos no recorrente."}</p></div></div>
           ${(i.concentracao || []).map((c) => `<div class="pct" style="display:grid;grid-template-columns:110px 1fr 70px;gap:10px;align-items:center;margin:6px 0"><span class="forte" style="font-weight:700">${esc(c.cliente)}</span><span class="tr"><i style="width:${c.pct}%"></i></span><span class="num" style="text-align:right">${n1(c.pct)}%</span></div>`).join("")}</section>
         <section class="card"><div class="sec-h"><div><h2>Inadimplência</h2><p>Parcelas vencidas em aberto.</p></div></div>${tabela([["Cliente"], ["Parcelas", "n"], ["Em aberto", "n"], ["Dias", "n"]],
-          d.inadimplencia.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">${esc(x.cliente)}</td><td class="n">${x.parcelas}</td><td class="n">${brl(x.em_aberto)}</td><td class="n"><span class="pill ${x.dias > 30 ? "atr" : "risco"}">${x.dias}</span></td></tr>`), "Nenhuma parcela vencida em aberto.")}</section>
+          d.inadimplencia.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">${esc(x.cliente)}</td><td class="n">${x.parcelas}</td><td class="n">${brl(x.em_aberto)}</td><td class="n"><span class="pill ${x.dias > 30 ? "atr" : "risco"}">${x.dias}</span></td></tr>`), semInad ? "Ainda não medida: a planilha de fluxo de caixa registra as entradas por banco, não por cliente. Entra com a carga do Conta Azul (contas a receber por cliente)." : "Nenhuma parcela vencida em aberto.")}</section>
       </div>
     </div>
     <div style="color:var(--ink3);font-size:12.5px;margin:4px">Última importação: ${quando(i.ultima_importacao)}.</div>`;
