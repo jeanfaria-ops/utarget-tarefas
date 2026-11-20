@@ -493,7 +493,7 @@ async function telaMargem() {
   // custo comum aberto por natureza (estrutura, gestão, horas internas); aquisição fica fora da margem
   const cItens = (cm?.itens || []).filter((i) => i.natureza === "comum"), aItens = (cm?.itens || []).filter((i) => i.natureza === "aquisicao");
   const somaG = (g) => cItens.filter((i) => i.grupo === g).reduce((a, i) => a + +i.valor, 0);
-  const COMUM_G = [["Estrutura", "Estrutura", "Sistemas, ocupação, copa, cursos, tarifas e CRC"], ["Mentoria", "Mentoria", "Mentoria de R$ 35.690 (out/2026) amortizada em 12 meses"], ["Gestão e coordenação", "Gestão", "Parte do tempo de Cris, Jean e Lucas dedicada a gerir o escritório"], ["Horas internas da equipe", "Horas", "Horas que a equipe lançou em atividades internas, sem cliente"]];
+  const COMUM_G = [["Estrutura", "Estrutura", "Sistemas, ocupação, copa, tarifas e CRC"], ["Mentoria e cursos", "Formação", "Mentoria de R$ 35.690 (out/2026) em 12 meses e cursos recorrentes"], ["Gestão e coordenação", "Gestão", "Parte do tempo de Cris, Jean e Lucas dedicada a gerir o escritório"], ["Horas internas da equipe", "Horas", "Horas que a equipe lançou em atividades internas, sem cliente"]];
   const aqTot = aItens.reduce((a, i) => a + +i.valor, 0);
   const abertos = st.margemAbertos || (st.margemAbertos = new Set());
   const modo = st.margemModo || (st.margemModo = "grupo");
