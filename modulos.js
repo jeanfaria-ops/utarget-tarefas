@@ -524,7 +524,7 @@ async function telaMargem() {
   const depOrd = DEPS.map((k) => d.departamentos.find((x) => x.departamento === k)).filter(Boolean);
   const cascata = [{ rot: "Receita", rot2: "líquida", v: recTot, total: true, cor: "var(--c-ok)", sub: "Honorários menos DAS" }]
     .concat(depOrd.map((k) => ({ rot: k.departamento, rot2: `${n0(k.horas_apontadas)}h`, v: -k.custo_direto, cor: DEPC[k.departamento], sub: `Custo direto de quem produz · R$ ${n1(k.custo_direto_hora)}/h` })))
-    .concat(cItens.length ? COMUM_G.map(([g, rot, sub]) => ({ rot, rot2: g === "Horas internas da equipe" ? "internas" : g === "Estrutura" ? "do escritório" : "e coordenação", v: -somaG(g), cor: "var(--s-neu)", sub }))
+    .concat(cItens.length ? COMUM_G.map(([g, rot, sub]) => ({ rot, rot2: g === "Horas internas da equipe" ? "internas" : "", v: -somaG(g), cor: "var(--s-neu)", sub }))
       : [{ rot: "Comum", rot2: "estrutura", v: -dep0.custo_comum_total, cor: "var(--s-neu)", sub: "Sistemas, ocupação, gestão, financeiro, encargos e mentoria" }])
     .concat([
              { rot: "Resultado", rot2: "operação", v: resOp, total: true, cor: resOp < 0 ? "var(--c-atr)" : "var(--ok-ink)" }]);
