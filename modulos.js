@@ -652,7 +652,7 @@ h1{font-size:22px;font-weight:800;margin:18px 0 2px;letter-spacing:-.3px}h1 span
 .k.dest{background:var(--azul);color:#fff}.k.dest .r,.k.dest .s{color:rgba(255,255,255,.85)}
 .k.neg .v{color:#C5221F}
 h2{font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--grafite);margin:18px 0 8px;border-left:4px solid var(--laranja);padding-left:8px}
-.dl{display:grid;gap:6px}.dl .l{display:grid;grid-template-columns:150px 1fr 90px;gap:10px;align-items:center;font-size:11px}
+.dl{display:grid;gap:6px}.dl .l{display:grid;grid-template-columns:160px 1fr 150px;gap:10px;align-items:center;font-size:11px}
 .dl .t{height:12px;background:var(--fundo);border-radius:4px;overflow:hidden}.dl .t i{display:block;height:100%;border-radius:4px}
 .dl .n{text-align:right;font-weight:700}.dl .n small{font-weight:500;color:var(--ink3)}
 table{width:100%;border-collapse:collapse;font-size:10.5px}th{text-align:left;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3);font-weight:700;border-bottom:1.5px solid var(--grafite);padding:6px 5px}
