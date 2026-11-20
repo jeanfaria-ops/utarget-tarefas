@@ -493,7 +493,7 @@ async function telaMargem() {
   // custo comum aberto por natureza (estrutura, gestão, horas internas); aquisição fica fora da margem
   const cItens = (cm?.itens || []).filter((i) => i.natureza === "comum"), aItens = (cm?.itens || []).filter((i) => i.natureza === "aquisicao");
   const somaG = (g) => cItens.filter((i) => i.grupo === g).reduce((a, i) => a + +i.valor, 0);
-  const COMUM_G = [["Estrutura", "Estrutura", "Sistemas, ocupação, copa, mentoria, cursos e CRC"], ["Gestão e coordenação", "Gestão", "Parte do tempo de Cris, Jean e Lucas dedicada a gerir o escritório"], ["Horas internas da equipe", "Horas", "Horas que a equipe lançou em atividades internas, sem cliente"]];
+  const COMUM_G = [["Estrutura", "Estrutura", "Sistemas, ocupação, copa, cursos, tarifas e CRC"], ["Mentoria", "Mentoria", "Mentoria de R$ 35.690 (out/2026) amortizada em 12 meses"], ["Gestão e coordenação", "Gestão", "Parte do tempo de Cris, Jean e Lucas dedicada a gerir o escritório"], ["Horas internas da equipe", "Horas", "Horas que a equipe lançou em atividades internas, sem cliente"]];
   const aqTot = aItens.reduce((a, i) => a + +i.valor, 0);
   const abertos = st.margemAbertos || (st.margemAbertos = new Set());
   const modo = st.margemModo || (st.margemModo = "grupo");
@@ -543,7 +543,7 @@ async function telaMargem() {
           <b>${brl(semDono)}</b> do custo está em horas de clientes sem contrato ativo no banco.</span></div>
       <div>${vizCascata(cascata)}</div></div></section>
     ${cItens.length ? `<section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Do que é feito o custo comum</h2><p>${brl(cItens.reduce((a, i) => a + +i.valor, 0))} por mês divididos pelas horas de cliente. Aquisição de clientes (comercial e social mídia) não entra: são <b>${brl(aqTot)}</b> por mês fora da margem.</p></div></div>
-        <div class="bi-r c3">${COMUM_G.map(([g, rot]) => `<div><div class="mg-t" style="margin-bottom:6px">${esc(g)} · <b>${brl(somaG(g))}</b></div>${vizBarras(cItens.filter((i) => i.grupo === g).map((i) => ({ rot: i.item.replace(/^(Gestão|Horas internas) · /, ""), valor: brl(i.valor), partes: [{ v: +i.valor, cor: "var(--s-neu)", rot: i.item }] })), { max: Math.max(...cItens.map((i) => +i.valor)) })}</div>`).join("")}</div>
+        <div class="bi-r c4">${COMUM_G.map(([g, rot]) => `<div><div class="mg-t" style="margin-bottom:6px">${esc(g)} · <b>${brl(somaG(g))}</b></div>${vizBarras(cItens.filter((i) => i.grupo === g).map((i) => ({ rot: i.item.replace(/^(Gestão|Horas internas) · /, ""), valor: brl(i.valor), partes: [{ v: +i.valor, cor: "var(--s-neu)", rot: i.item }] })), { max: Math.max(...cItens.map((i) => +i.valor)) })}</div>`).join("")}</div>
         <div style="margin-top:12px;font-size:12.5px;color:var(--ink2)"><b>Fora da margem (aquisição):</b> ${aItens.map((i) => `${esc(i.item)} ${brl(i.valor)}`).join(" · ")}</div></section>` : ""}
     <div class="bi-r c2">
       <section class="card"><div class="sec-h"><div><h2>Honorário × custo de servir</h2><p>Cada bolha é um grupo econômico; o tamanho é o número de horas. Acima da linha vermelha, o grupo dá prejuízo.</p></div></div>
