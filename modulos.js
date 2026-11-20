@@ -643,7 +643,7 @@ function relatorioCliente(d, { margem = true, janela = null } = {}) { // margem 
     top && totH ? `<b>${Math.round((100 * top.horas) / totH)}%</b> do trabalho do mês foi para <b>${esc(top.sigla || top.nome)}</b>.` : "",
     dep0 ? `<b>${esc(NOME[dep0.departamento] || dep0.departamento)}</b> concentra <b>${Math.round(dep0.pct)}%</b> do esforço da equipe.` : "",
     grupo && lista.filter((e) => !e.horas).length ? `${lista.filter((e) => !e.horas).length} ${lista.filter((e) => !e.horas).length === 1 ? "empresa não teve" : "empresas não tiveram"} horas lançadas diretamente: o trabalho delas foi registrado na matriz.` : "",
-    !margem && cobreV != null && r.honorario ? (cobreV < 100 ? `O honorário atual corresponde a <b>${cobreV}%</b> do valor do serviço entregue no mês (${R(r.honorario)} de ${R(totV)}).` : `O honorário atual cobre o valor do serviço entregue no mês.`) : "",
+    cobreV != null && r.honorario ? (cobreV < 100 ? `O honorário atual corresponde a <b>${cobreV}%</b> do valor do serviço entregue no mês (${R(r.honorario)} de ${R(totV)}).` : `O honorário atual cobre o valor do serviço entregue no mês.`) : "",
     margem && r.margem_pct != null ? (r.resultado < 0
       ? `O honorário atual não cobre nem o custo do trabalho: a Utarget tem <b class="neg">prejuízo de ${R(-r.resultado)} por mês</b> com ${grupo ? "o grupo" : "a entidade"} (margem de <b class="neg">${H1(r.margem_pct)}%</b>). Hoje esse prejuízo é pago pelo resultado dos demais clientes do escritório.`
       : r.margem_pct < alvo * 100 ? `O honorário cobre o custo do trabalho, mas a margem de <b>${H1(r.margem_pct)}%</b> fica abaixo dos <b>${Math.round(alvo * 100)}%</b> que sustentam o escritório.`

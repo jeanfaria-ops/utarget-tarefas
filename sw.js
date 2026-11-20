@@ -1,6 +1,6 @@
 // Service worker mínimo: guarda só a casca do app; dados sempre vêm do Supabase.
-const CASCA = "utarget-casca-v22";
-const ARQS = ["./", "index.html", "app.js?v=22", "app.css?v=22", "logo-azul.svg", "logo-claro.svg", "manifest.webmanifest", "icon.svg", "supabase.min.js", "modulos.js?v=22"];
+const CASCA = "utarget-casca-v23";
+const ARQS = ["./", "index.html", "app.js?v=23", "app.css?v=23", "logo-azul.svg", "logo-claro.svg", "manifest.webmanifest", "icon.svg", "supabase.min.js", "modulos.js?v=23"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CASCA).then((c) => c.addAll(ARQS))); self.skipWaiting(); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CASCA).map((k) => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener("fetch", (e) => {
