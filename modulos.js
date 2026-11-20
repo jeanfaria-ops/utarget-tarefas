@@ -508,7 +508,7 @@ async function telaMargem() {
       <td class="n">${brl(x.honorario)}</td><td class="n">${x.custo_total == null ? "—" : brl(x.custo_total)}</td>
       <td class="n">${x.resultado == null ? "—" : `<span class="${x.resultado < 0 ? "t-atr" : ""}">${brl(x.resultado)}</span>`}</td><td class="n">${mg(x.margem_pct)}</td>
       <td class="hm">${top ? `<b style="font-size:12.5px">${esc(top.departamento)}</b> <small style="color:var(--ink3)">${n1(top.horas)}h · ${n0(top.pct)}% do custo</small>` : '<span style="color:var(--ink3)">sem apontamento</span>'}</td>
-      <td><button class="st-b" data-mgg="${esc(x.grupo)}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button></td></tr>
+      <td><div class="mg-acts"><button class="st-b" data-mgg="${esc(x.grupo)}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button>${botaoRel("g", x.grupo)}</div></td></tr>
       ${ab ? `<tr class="un"><td colspan="7"><div class="mg-ab">
         <div><div class="mg-t">Custo por departamento</div>${(x.deptos || []).map((k) => `<div class="mg-l"><span>${esc(k.departamento)}</span><span class="tr"><i style="width:${k.pct}%"></i></span><b>${brl(k.custo)}</b><small>${n1(k.horas)}h</small></div>`).join("") || '<div style="color:var(--ink3);font-size:12.5px">Sem horas apontadas na competência.</div>'}</div>
         <div><div class="mg-t">CNPJs do grupo</div>${(x.unidades || []).map((u) => `<button class="mg-u" ${u.entidade_id ? `data-ent="${u.entidade_id}"` : ""}><span>${esc(u.sigla || "—")}</span><small>${esc(u.cliente || "")}</small><b>${brl(u.honorario)}</b></button>`).join("")}</div>
@@ -556,7 +556,7 @@ async function telaMargem() {
           cnpjs.filter((x) => casa(x, ["sigla", "cliente", "grupo"])).map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : ""}><td class="cl-c"><b>${esc(x.sigla || "—")}</b><small>${esc(x.cliente || "")}${x.grupo && x.grupo !== x.sigla ? " · grupo " + esc(x.grupo) : ""}</small></td>
             <td class="n">${brl(x.honorario)}</td><td class="n hm">${x.horas == null ? "—" : n1(x.horas)}</td><td class="n">${x.custo == null ? "—" : brl(x.custo)}</td>
             <td class="n">${x.custo == null ? "—" : `<span class="${x.resultado < 0 ? "t-atr" : ""}">${brl(x.resultado)}</span>`}</td><td class="n">${mg(x.margem_pct)}</td>
-            <td><button class="st-b" data-mge="${x.entidade_id}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button></td></tr>`))}</div>
+            <td><div class="mg-acts"><button class="st-b" data-mge="${x.entidade_id}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button>${x.custo == null ? "" : botaoRel("e", x.entidade_id)}</div></td></tr>`))}</div>
     <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo inclui pró-labore da Cris e remuneração do Jean (decisão de 19/11/2026), encargos reais (FGTS e INSS), benefícios, provisão de 13º e férias, estrutura (sistemas, ocupação, CRC, mentoria em 12 meses). Aquisição de clientes e despesas pessoais dos sócios ficam fora. Horas em clientes sem contrato ativo não entram em nenhum grupo.</div>`;
   $$("tr.gr").forEach((t) => (t.onclick = () => { const g = t.dataset.g; abertos.has(g) ? abertos.delete(g) : abertos.add(g); telaMargem(); }));
   $$("[data-seg=mg]").forEach((b) => (b.onclick = () => { st.margemModo = b.dataset.k; telaMargem(); }));
@@ -565,7 +565,18 @@ async function telaMargem() {
   $$("[data-pt]").forEach((b) => (b.onclick = () => analiseMargem({ p_grupo: b.dataset.pt })));
   ligaTips($("#view"));
   $$("[data-mge]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); analiseMargem({ p_entidade: b.dataset.mge }); }));
+  $$("[data-rel]").forEach((b) => (b.onclick = async (e) => {
+    e.stopPropagation();
+    const w = window.open("", "_blank"); // abre já no clique, senão o navegador bloqueia o pop-up
+    if (!w) return toast("Libere pop-ups para abrir o relatório");
+    w.document.write('<p style="font:16px Montserrat,Arial,sans-serif;padding:32px">Gerando o relatório…</p>');
+    const [tipo, id] = [b.dataset.rel, b.dataset.id];
+    try { const d = await rpcMod("app_mod_margem_detalhe", { p_grupo: tipo === "g" ? id : null, p_entidade: tipo === "e" ? id : null }, true); relatorioCliente(d, { margem: false, janela: w }); }
+    catch (err) { w.close(); toast(err.message); }
+  }));
 }
+// Botão do relatório de custo ao cliente, ao lado da situação (só diretoria; regra de 19/11/2026)
+const botaoRel = (tipo, id) => (st.eu?.papel === "admin" ? `<button class="rel-b" data-rel="${tipo}" data-id="${esc(String(id))}" title="Relatório de custo para o cliente (PDF)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Relatório</button>` : "");
 
 // análise de rentabilidade (gaveta) de um grupo ou de um CNPJ
 async function analiseMargem(args) {
@@ -603,7 +614,7 @@ async function analiseMargem(args) {
 
 
 // relatório imprimível para o cliente (marca Utarget, A4)
-function relatorioCliente(d, { margem = true } = {}) {
+function relatorioCliente(d, { margem = true, janela = null } = {}) {
   const r = d.resultado || {}, s = d.sinais || {}, grupo = d.tipo === "grupo";
   const hojeBR = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "long", year: "numeric" });
   const mesRef = new Date(String(d.competencia).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -667,7 +678,7 @@ td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
 .acoes{position:fixed;top:12px;right:16px;display:flex;gap:8px}.acoes button{font:700 13px Montserrat,sans-serif;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--azul);color:#fff}.acoes button.s{background:#fff;color:var(--ink);border:1px solid var(--linha)}
 @page{size:A4;margin:0}@media print{body{background:#fff}.pg{margin:0;box-shadow:none}.acoes{display:none}}
 </style></head><body>
-<div class="acoes"><button onclick="print()">Salvar em PDF / imprimir</button><button class="s" onclick="close()">Fechar</button></div>
+<div class="acoes"><button onclick="print()">Salvar em PDF / imprimir</button><button class="s" onclick="window.close()">Fechar</button></div>
 <div class="pg">
   <div class="bar-top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/, "")}logo-claro.svg" alt="Utarget Contabilidade & Assessoria"><div class="dt">Emitido em ${hojeBR}<br>Competência: ${mesRef}</div></div>
   <h1>Relatório de consumo de serviços<br><span>${esc(d.nome)}</span></h1>
@@ -691,7 +702,7 @@ td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
   <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do serviço multiplica as horas de cada área pelo preço-hora de referência da Utarget para aquela área, que cobre a equipe, encargos, benefícios, a estrutura do escritório, os tributos e a margem mínima de operação. ${margem ? "A margem é a diferença entre o honorário, líquido do Simples Nacional, e o valor do trabalho entregue. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
   <div class="rod"><span>Utarget Contabilidade &amp; Assessoria · especializada no Terceiro Setor desde 2016</span><span>WhatsApp (11) 2642-8636 · utarget.com.br</span></div>
 </div></body></html>`;
-  const w = window.open("", "_blank");
+  const w = janela || window.open("", "_blank");
   if (!w) return toast("Libere pop-ups para abrir o relatório");
   w.document.open(); w.document.write(html); w.document.close();
 }

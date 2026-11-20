@@ -574,3 +574,9 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .cap-m>div{display:flex;flex-wrap:wrap;gap:6px}
 .cap-m .sg{font:inherit;font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;border:1px solid var(--linha);background:var(--sup);color:var(--ink);cursor:pointer}
 .cap-m .sg:hover{border-color:var(--azul)}
+
+/* v0.9 margem: botão do relatório ao cliente ao lado da situação */
+.mg-acts{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.rel-b{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid var(--linha);background:var(--sup);color:var(--azul-txt);cursor:pointer}
+.rel-b svg{width:14px;height:14px}
+.rel-b:hover{border-color:var(--azul);background:var(--sup2)}
