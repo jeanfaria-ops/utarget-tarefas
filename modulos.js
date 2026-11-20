@@ -613,6 +613,11 @@ function relatorioCliente(d, { margem = true } = {}) {
   const CORES = { "Contábil": "#2a78d6", "DP": "#eb6834", "BPO": "#1baf7a", "Legalização": "#eda100", "Fiscal": "#e87ba4" };
   const NOME = { "Contábil": "Contabilidade", "DP": "Departamento Pessoal", "BPO": "BPO Financeiro", "Legalização": "Legalização e certificações", "Fiscal": "Fiscal" };
   const totH = r.horas || 0, totC = r.custo || 0;
+  // Valor do serviço entregue = custo da área ÷ ((1 − Simples) × (1 − margem mínima)): preço que o trabalho deveria ter
+  const das = (r.das_pct ?? 11) / 100, alvo = (r.margem_alvo_pct ?? 40) / 100, fator = (1 - das) * (1 - alvo);
+  const preco = (custo) => (+custo || 0) / fator;
+  const totV = (d.departamentos || []).reduce((s, k) => s + preco(k.custo), 0) || preco(totC);
+  const cobreV = totV ? Math.round((100 * (r.honorario || 0)) / totV) : null;
   // empresas
   const emp = new Map();
   (d.empresas || []).forEach((e) => emp.set(e.entidade_id, { ...e, horas: 0, custo: 0, deps: {} }));
@@ -627,6 +632,7 @@ function relatorioCliente(d, { margem = true } = {}) {
     top && totH ? `<b>${Math.round((100 * top.horas) / totH)}%</b> do trabalho do mês foi para <b>${esc(top.sigla || top.nome)}</b>.` : "",
     dep0 ? `<b>${esc(NOME[dep0.departamento] || dep0.departamento)}</b> concentra <b>${Math.round(dep0.pct)}%</b> do esforço da equipe.` : "",
     grupo && lista.filter((e) => !e.horas).length ? `${lista.filter((e) => !e.horas).length} ${lista.filter((e) => !e.horas).length === 1 ? "empresa não teve" : "empresas não tiveram"} horas lançadas diretamente: o trabalho delas foi registrado na matriz.` : "",
+    !margem && cobreV != null && r.honorario ? (cobreV < 100 ? `O honorário atual corresponde a <b>${cobreV}%</b> do valor do serviço entregue no mês (${R(r.honorario)} de ${R(totV)}).` : `O honorário atual cobre o valor do serviço entregue no mês.`) : "",
     margem && r.margem_pct != null ? (r.resultado < 0 ? `O honorário atual cobre cerca de <b>${cobre}%</b> do custo do trabalho entregue; a diferença hoje é absorvida pela Utarget.` : `O honorário cobre o trabalho entregue e deixa margem de <b>${H1(r.margem_pct)}%</b> para o escritório.`) : "",
   ].filter(Boolean);
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -669,20 +675,20 @@ td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
   <div class="kp">
     <div class="k"><div class="r">Honorário mensal</div><div class="v">${R(r.honorario)}</div><div class="s">${grupo ? "soma das empresas" : "contrato vigente"}</div></div>
     <div class="k"><div class="r">Horas de trabalho</div><div class="v">${H1(totH)} h</div><div class="s">lançadas pela equipe no mês</div></div>
-    <div class="k ${margem ? "" : "dest"}"><div class="r">Valor do trabalho entregue</div><div class="v">${R(totC)}</div><div class="s">horas × custo-hora de cada área</div></div>
+    <div class="k ${margem ? "" : "dest"}"><div class="r">Valor do serviço entregue</div><div class="v">${R(totV)}</div><div class="s">horas de cada área × preço-hora de referência</div></div>
     ${margem ? `<div class="k dest ${r.resultado < 0 ? "" : ""}"><div class="r">Margem para o escritório</div><div class="v">${r.margem_pct == null ? "—" : H1(r.margem_pct) + "%"}</div><div class="s">${r.resultado == null ? "" : (r.resultado < 0 ? "déficit de " : "resultado de ") + R(Math.abs(r.resultado)) + " no mês"}</div></div>` : ""}
   </div>
   <h2>Onde o trabalho se concentra</h2>
-  <div class="dl">${(d.departamentos || []).map((k) => `<div class="l"><span>${esc(NOME[k.departamento] || k.departamento)}</span><span class="t"><i style="width:${k.pct}%;background:${CORES[k.departamento] || "#999"}"></i></span><span class="n">${H1(k.horas)} h <small>· ${Math.round(k.pct)}%</small></span></div>`).join("")}</div>
+  <div class="dl">${(d.departamentos || []).map((k) => `<div class="l"><span>${esc(NOME[k.departamento] || k.departamento)}</span><span class="t"><i style="width:${k.pct}%;background:${CORES[k.departamento] || "#999"}"></i></span><span class="n">${H1(k.horas)} h <small>· ${R(preco(k.custo))}</small></span></div>`).join("")}<div class="l" style="border-top:1px solid var(--linha);padding-top:6px"><b>Total</b><span></span><span class="n">${H1(totH)} h <small>· ${R(totV)}</small></span></div></div>
   <h2>Consumo por empresa</h2>
   <div class="leg">${DEPS.filter((k) => (d.departamentos || []).some((x) => x.departamento === k)).map((k) => `<span><i style="background:${CORES[k]}"></i>${NOME[k]}</span>`).join("")}</div>
-  <table><thead><tr><th>Empresa</th><th class="n">Honorário</th><th class="n">Horas</th><th style="width:30%">Distribuição do trabalho</th><th class="n">% do grupo</th>${margem ? '<th class="n">Valor do trabalho</th>' : ""}</tr></thead><tbody>
+  <table><thead><tr><th>Empresa</th><th class="n">Honorário</th><th class="n">Horas</th><th style="width:30%">Distribuição do trabalho</th><th class="n">% do grupo</th><th class="n">Valor do serviço</th></tr></thead><tbody>
   ${lista.map((e) => `<tr><td><b>${esc(e.sigla || "—")}</b><small>${esc(e.nome || "")}${e.cnpj ? " · " + cnpjFmt(e.cnpj) : ""}</small></td><td class="n">${e.honorario ? R(e.honorario) : "—"}</td><td class="n">${e.horas ? H1(e.horas) : "—"}</td>
-    <td>${e.horas ? barra(e.deps, e.horas, Math.max(4, (100 * e.horas) / maxH)) : '<small>registrado na matriz</small>'}</td><td class="n">${totH && e.horas ? Math.round((100 * e.horas) / totH) + "%" : "—"}</td>${margem ? `<td class="n">${e.custo ? R(e.custo) : "—"}</td>` : ""}</tr>`).join("")}
+    <td>${e.horas ? barra(e.deps, e.horas, Math.max(4, (100 * e.horas) / maxH)) : '<small>registrado na matriz</small>'}</td><td class="n">${totH && e.horas ? Math.round((100 * e.horas) / totH) + "%" : "—"}</td><td class="n">${e.custo ? R(preco(e.custo)) : "—"}</td></tr>`).join("")}
   </tbody></table>
   <h2>Leitura do mês</h2>
   <div class="box">${leitura.map((t) => `<p>${t}</p>`).join("")}${s.tickets_90d ? `<p>Nos últimos 90 dias foram <b>${s.tickets_90d}</b> atendimentos pelo WhatsApp${s.resp_mediana_min != null ? `, com primeira resposta em <b>${Math.round(s.resp_mediana_min)} min</b> (mediana)` : ""}.</p>` : ""}</div>
-  <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do trabalho multiplica as horas pelo custo-hora de cada área, que inclui a equipe, encargos, benefícios e a estrutura do escritório. ${margem ? "A margem é a diferença entre o honorário, líquido do Simples Nacional, e o valor do trabalho entregue. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
+  <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do serviço multiplica as horas de cada área pelo preço-hora de referência da Utarget para aquela área, que cobre a equipe, encargos, benefícios, a estrutura do escritório, os tributos e a margem mínima de operação. ${margem ? "A margem é a diferença entre o honorário, líquido do Simples Nacional, e o valor do trabalho entregue. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
   <div class="rod"><span>Utarget Contabilidade &amp; Assessoria · especializada no Terceiro Setor desde 2016</span><span>WhatsApp (11) 2642-8636 · utarget.com.br</span></div>
 </div></body></html>`;
   const w = window.open("", "_blank");
