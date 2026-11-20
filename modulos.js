@@ -166,7 +166,7 @@ async function telaInicio() {
       </div></aside>
     </div>`;
   ligaIr();
-  const itens = [];
+  let itens = [];
   const pulso = (cod, n, sub, cls) => { const b = $(`#pl-${cod}`); if (b) { $(".pn", b).className = "pn " + (cls ? "t-" + cls : ""); $(".pn", b).textContent = n; $("small", b).textContent = sub; } };
   const fontes = {
     gclick: async () => { const d = await rpcMod("app_mod_gclick"); const ab = d.tarefas.filter((t) => t.ab && t.minha);
@@ -199,7 +199,7 @@ async function telaInicio() {
       if (parados.length) itens.push({ sev: 2, mod: "Comercial", tit: `${plural(parados.length, "proposta parada", "propostas paradas")} há mais de 14 dias`, ctx: parados.slice(0, 5).map((x) => x.deal).join(", "), acao: () => irPara("comercial") }); },
     atendimento: async () => { const d = await rpcMod("app_mod_atendimento"); const par = d.setores.reduce((a, s) => a + s.parados_24h, 0);
       pulso("atendimento", par, `conversas paradas há mais de 24h`, par ? "atr" : "");
-      d.setores.filter((s) => s.parados_24h > 0).forEach((s) => itens.push({ sev: s.parados_24h > 10 ? 1 : 2, mod: "Atendimento", tit: `${s.parados_24h} conversas paradas há mais de 24h`, ctx: String(s.setor).replace(/^\S+\s/, ""), acao: () => irPara("atendimento") })); },
+      d.setores.filter((s) => s.parados_24h > 0).forEach((s) => itens.push({ sev: s.parados_24h > 10 ? 1 : 2, mod: "Atendimento", tit: `${s.parados_24h} conversas paradas há mais de 24h`, ctx: nomeSetor(s.setor), acao: () => irPara("atendimento") })); },
     financeiro: async () => { const d = await rpcMod("app_mod_financeiro"); const i = d.indicadores || {};
       pulso("financeiro", i.folego_meses == null ? "—" : n1(i.folego_meses), `meses de fôlego de caixa · MRR ${brl(i.mrr)}`, i.folego_meses < 1 ? "atr" : "");
       if (i.folego_meses != null && i.folego_meses < 1) itens.push({ sev: 1, mod: "Financeiro", tit: `Caixa cobre ${n1(i.folego_meses)} mês de despesa`, ctx: `saldo ${brl(i.saldo_bancos)} · despesa média ${brl(i.despesa_media_3m)}`, acao: () => irPara("financeiro") });
@@ -210,6 +210,11 @@ async function telaInicio() {
   };
   await Promise.all((temMod("tarefas") ? [{ codigo: "gclick" }] : []).concat(outros).map((x) => (fontes[x.codigo] ? fontes[x.codigo]().catch((e) => pulso(x.codigo, "!", e.message, "atr")) : null)));
   if (st.view !== "inicio") return;
+  // Lei de Miller/Hick: itens iguais viram um só (ex.: 6 mandatos vencidos), com os clientes no contexto
+  const MODV = { "Legalização": "legalizacao", "Atendimento": "atendimento", "Carteira": "carteira", "Margem": "margem" };
+  const grupos = new Map(); itens.forEach((it) => { const k = it.mod + "|" + it.tit; (grupos.get(k) || grupos.set(k, []).get(k)).push(it); });
+  itens = [...grupos.values()].map((g) => g.length === 1 ? g[0] : { sev: Math.min(...g.map((x) => x.sev)), mod: g[0].mod, tit: `${g[0].tit} · ${g.length} casos`,
+    ctx: [...new Set(g.map((x) => String(x.ctx || "").split(" · ")[0]))].join(", "), acao: MODV[g[0].mod] ? () => irPara(MODV[g[0].mod]) : g[0].acao });
   itens.sort((a, b) => a.sev - b.sev);
   const graves = itens.filter((i) => i.sev <= 1).length;
   $("#ini-frase").innerHTML = itens.length ? `<b>${plural(itens.length, "ponto pede", "pontos pedem")}</b> sua atenção${graves ? `, <b>${graves}</b> ${graves === 1 ? "grave" : "graves"}` : ""}.` : "Nada pedindo atenção agora.";
@@ -332,6 +337,13 @@ async function telaLegalizacao() {
 }
 
 // ---------------------------------------------------------------- CAPTAÇÃO
+// Lei de Miller: encaixe alto aparece inteiro; encaixe médio vira uma linha por motivo, só com as siglas
+function capBons(bons, chipO) {
+  const alto = bons.filter((o) => o.encaixe === "alto"), med = bons.filter((o) => o.encaixe !== "alto");
+  const porMot = new Map(); med.forEach((o) => { const k = humano(o.motivo || "sem motivo informado"); (porMot.get(k) || porMot.set(k, []).get(k)).push(o); });
+  return (alto.length ? `<div class="cap-o">${alto.map(chipO).join("")}</div>` : "") +
+    [...porMot].map(([mot, l]) => `<div class="cap-m"><span>${plural(l.length, "com encaixe médio", "com encaixe médio")} · ${esc(mot)}</span><div>${l.map((o) => `<button class="sg" data-ent="${o.entidade_id}">${esc(o.sigla)}</button>`).join("")}</div></div>`).join("");
+}
 async function telaCaptacao() {
   cabecalho("Captação", "Editais abertos com OSCs da carteira que se encaixam");
   carregandoView();
@@ -345,7 +357,7 @@ async function telaCaptacao() {
   const card = (x) => `<div class="card cap">
       <div class="cap-h"><a class="cap-t" href="${esc(x.url || "#")}" target="_blank" rel="noopener">${esc(x.titulo)}</a>
         <span class="pill ${x.dias_para_fechar == null ? "neu" : x.dias_para_fechar <= 7 ? "atr" : x.dias_para_fechar <= 15 ? "risco" : "ok"}">${x.fecha ? "Fecha " + dm(x.fecha) + (x.dias_para_fechar != null ? ` · ${x.dias_para_fechar} dias` : "") : "Prazo a confirmar"}</span></div>
-      ${x.bons.length ? `<div class="cap-r">${plural(x.bons.length, "OSC se encaixa", "OSCs se encaixam")}</div><div class="cap-o">${x.bons.map(chipO).join("")}</div>` : ""}
+      ${x.bons.length ? `<div class="cap-r">${plural(x.bons.length, "OSC se encaixa", "OSCs se encaixam")}</div>${capBons(x.bons, chipO)}` : ""}
       ${x.resto.length ? `<details class="cap-d"><summary>${plural(x.resto.length, "OSC sem encaixe ou bloqueada", "OSCs sem encaixe ou bloqueadas")}</summary><div class="cap-o">${x.resto.map(chipO).join("")}</div></details>` : ""}
     </div>`;
   $("#view").innerHTML = `
@@ -398,6 +410,7 @@ function idadeFila(ab) {
   return b;
 }
 
+const nomeSetor = (s) => (s ? String(s).replace(/^[^\p{L}\p{N}]+/u, "").trim() || "Sem setor" : "Sem setor");
 async function telaAtendimento() {
   cabecalho("Atendimento", "WhatsApp da Utarget (ZapContábil)");
   carregandoView();
@@ -415,16 +428,16 @@ async function telaAtendimento() {
     <div class="bi-r c2b">
       <section class="card"><div class="sec-h"><div><h2>Fila por setor</h2><p>Abertos agora; em vermelho, os parados há mais de 24h.</p></div></div>
         ${legenda([["Parado há mais de 24h", "var(--c-atr)"], ["Movimentado nas últimas 24h", "var(--s1)"]])}
-        ${vizBarras(d.setores.filter((x) => x.abertos).map((x) => ({ rot: String(x.setor).replace(/^\S+\s/, ""), valor: x.abertos, partes: [{ v: x.parados_24h, cor: "var(--c-atr)", rot: "Parados > 24h" }, { v: x.abertos - x.parados_24h, cor: "var(--s1)", rot: "Recentes" }] })))}</section>
+        ${vizBarras(d.setores.filter((x) => x.abertos).map((x) => ({ rot: nomeSetor(x.setor), valor: x.abertos, partes: [{ v: x.parados_24h, cor: "var(--c-atr)", rot: "Parados > 24h" }, { v: x.abertos - x.parados_24h, cor: "var(--s1)", rot: "Recentes" }] })))}</section>
       <section class="card"><div class="sec-h"><div><h2>Há quanto tempo a conversa está parada</h2><p>Atendimentos abertos pela idade da última mensagem.</p></div></div>
         ${vizColunas(idadeFila(d.abertos), ["Atendimentos"], { "Atendimentos": "var(--s1)" }, { H: 200 })}</section>
     </div>
     <div class="grade">
       <section class="card"><div class="sec-h"><div><h2>Abertos, do mais parado ao mais recente</h2><p>Responder e transferir continua no ZapContábil.</p></div></div>${tabela([["Ticket"], ["Setor"], ["Cliente"], ["Atendente", "hm"], ["Parado", "n"]],
-        l.map((x) => { const h = horas(x.ultima_msg_em); return `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">#${esc(x.ticket_id)}</td><td style="font-size:12.5px">${esc(String(x.setor).replace(/^\S+\s/, ""))}</td><td>${esc(x.sigla || "—")}</td><td class="hm">${esc(curto(x.atendente || "—"))}</td><td class="n">${h == null ? "—" : `<span class="pill ${h > 24 ? "atr" : h > 4 ? "risco" : "ok"}">${h < 48 ? h + "h" : Math.round(h / 24) + "d"}</span>`}</td></tr>`; }), "Nenhum atendimento aberto.")}</section>
+        l.map((x) => { const h = horas(x.ultima_msg_em); return `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">#${esc(x.ticket_id)}</td><td style="font-size:12.5px">${esc(nomeSetor(x.setor))}</td><td>${esc(x.sigla || "—")}</td><td class="hm">${esc(curto(x.atendente || "—"))}</td><td class="n">${h == null ? "—" : `<span class="pill ${h > 24 ? "atr" : h > 4 ? "risco" : "ok"}">${h < 48 ? h + "h" : Math.round(h / 24) + "d"}</span>`}</td></tr>`; }), "Nenhum atendimento aberto.")}</section>
       <div style="display:grid;gap:16px;align-content:start">
         <section class="card"><div class="sec-h"><div><h2>Setores</h2><p>Mediana da 1ª resposta nos últimos 30 dias.</p></div></div>${tabela([["Setor"], ["Abertos", "n"], ["> 24h", "n"], ["1ª resp.", "n"]],
-          d.setores.map((s) => `<tr style="cursor:default"><td style="font-size:12.5px" class="forte">${esc(String(s.setor).replace(/^\S+\s/, ""))}</td><td class="n">${s.abertos}</td><td class="n">${s.parados_24h ? `<span class="pill atr">${s.parados_24h}</span>` : "0"}</td><td class="n">${s.mediana_resp_min == null ? "—" : n0(s.mediana_resp_min) + " min"}</td></tr>`))}</section>
+          d.setores.map((s) => `<tr style="cursor:default"><td style="font-size:12.5px" class="forte">${esc(nomeSetor(s.setor))}</td><td class="n">${s.abertos}</td><td class="n">${s.parados_24h ? `<span class="pill atr">${s.parados_24h}</span>` : "0"}</td><td class="n">${s.mediana_resp_min == null ? "—" : n0(s.mediana_resp_min) + " min"}</td></tr>`))}</section>
         <section class="card"><div class="sec-h"><div><h2>Clientes que mais chamaram</h2><p>Últimos 30 dias.</p></div></div>${tabela([["Cliente"], ["Atend.", "n"], ["Msgs do cliente", "n"]],
           d.clientes.map((c) => `<tr data-ent="${c.entidade_id}"><td class="forte">${esc(c.sigla)}</td><td class="n">${c.tickets}</td><td class="n">${c.msgs_cliente ?? "—"}</td></tr>`))}</section>
       </div>
@@ -440,7 +453,10 @@ async function telaFinanceiro() {
   let d; try { d = await rpcMod("app_mod_financeiro"); } catch (e) { return erroView(e); }
   const i = d.indicadores || {}; const hoje = hojeISO();
   const mes = (d.mensal || []).find((x) => String(x.mes).slice(0, 7) === hoje.slice(0, 7)) || {};
-  const ms = (d.mensal || []).filter((x) => String(x.mes).slice(0, 7) <= hoje.slice(0, 7));
+  const ms0 = (d.mensal || []).filter((x) => String(x.mes).slice(0, 7) <= hoje.slice(0, 7));
+  const ini = ms0.findIndex((x) => +x.faturado || +x.recebido || +x.pago); // estética-usabilidade: sem meses vazios antes do primeiro dado
+  const ms = ini < 0 ? ms0 : ms0.slice(ini);
+  const top2 = (i.concentracao || []).slice(0, 2), pct2 = top2.reduce((s, c) => s + (+c.pct || 0), 0);
   const max = Math.max(1, ...ms.map((x) => Math.max(+x.faturado || 0, +x.recebido || 0, +x.pago || 0)));
   $("#view").innerHTML = `
     <div class="kpis">
@@ -451,12 +467,12 @@ async function telaFinanceiro() {
       ${kpiM("Saldo em bancos", brl(i.saldo_bancos), `fôlego ${n1(i.folego_meses)} mês · em ${dmy(i.saldo_em)}`, i.folego_meses < 1 ? "atr" : "")}
     </div>
     <div class="grade">
-      <section class="card"><div class="sec-h"><div><h2>Mês a mês</h2><p>Faturado, recebido e pago nos últimos 12 meses.</p></div></div>
+      <section class="card"><div class="sec-h"><div><h2>Mês a mês</h2><p>Faturado, recebido e pago${ms.length < ms0.length ? ` desde ${comp(ms[0].mes)}, primeiro mês com dado importado` : " nos últimos 12 meses"}.</p></div></div>
         <div class="leg"><span><i style="background:var(--c-ok)"></i>Faturado</span><span><i style="background:var(--ok-ink)"></i>Recebido</span><span><i style="background:var(--c-risco)"></i>Pago</span></div>
         <div class="barras">${ms.map((x) => `<div class="bc" data-tipm="${esc(comp(x.mes))}|${brl(x.faturado)}|${brl(x.recebido)}|${brl(x.pago)}"><div class="bb">
           <i style="height:${(+x.faturado / max) * 100}%;background:var(--c-ok)"></i><i style="height:${(+x.recebido / max) * 100}%;background:var(--ok-ink)"></i><i style="height:${(+x.pago / max) * 100}%;background:var(--c-risco)"></i></div><span>${MES[+String(x.mes).slice(5, 7) - 1]}</span></div>`).join("")}</div></section>
       <div style="display:grid;gap:16px;align-content:start">
-        <section class="card"><div class="sec-h"><div><h2>Concentração</h2><p>Maiores contratos no recorrente.</p></div></div>
+        <section class="card"><div class="sec-h"><div><h2>Concentração</h2><p>${pct2 >= 50 ? `<b style="color:var(--atr-ink)">${top2.map((c) => esc(c.cliente)).join(" e ")} somam ${n1(pct2)}% do recorrente.</b> Perder um deles muda o caixa.` : "Maiores contratos no recorrente."}</p></div></div>
           ${(i.concentracao || []).map((c) => `<div class="pct" style="display:grid;grid-template-columns:110px 1fr 70px;gap:10px;align-items:center;margin:6px 0"><span class="forte" style="font-weight:700">${esc(c.cliente)}</span><span class="tr"><i style="width:${c.pct}%"></i></span><span class="num" style="text-align:right">${n1(c.pct)}%</span></div>`).join("")}</section>
         <section class="card"><div class="sec-h"><div><h2>Inadimplência</h2><p>Parcelas vencidas em aberto.</p></div></div>${tabela([["Cliente"], ["Parcelas", "n"], ["Em aberto", "n"], ["Dias", "n"]],
           d.inadimplencia.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">${esc(x.cliente)}</td><td class="n">${x.parcelas}</td><td class="n">${brl(x.em_aberto)}</td><td class="n"><span class="pill ${x.dias > 30 ? "atr" : "risco"}">${x.dias}</span></td></tr>`), "Nenhuma parcela vencida em aberto.")}</section>
