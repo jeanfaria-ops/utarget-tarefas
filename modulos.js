@@ -212,7 +212,7 @@ async function telaInicio() {
   if (st.view !== "inicio") return;
   // Lei de Miller/Hick: itens iguais viram um só (ex.: 6 mandatos vencidos), com os clientes no contexto
   const MODV = { "Legalização": "legalizacao", "Atendimento": "atendimento", "Carteira": "carteira", "Margem": "margem" };
-  const grupos = new Map(); itens.forEach((it) => { const k = it.mod + "|" + it.tit; (grupos.get(k) || grupos.set(k, []).get(k)).push(it); });
+  const grupos = new Map(); itens.forEach((it, i) => { const k = it.mod === "Atendimento" ? "u" + i : it.mod + "|" + it.tit; (grupos.get(k) || grupos.set(k, []).get(k)).push(it); });
   itens = [...grupos.values()].map((g) => g.length === 1 ? g[0] : { sev: Math.min(...g.map((x) => x.sev)), mod: g[0].mod, tit: `${g[0].tit} · ${g.length} casos`,
     ctx: [...new Set(g.map((x) => String(x.ctx || "").split(" · ")[0]))].join(", "), acao: MODV[g[0].mod] ? () => irPara(MODV[g[0].mod]) : g[0].acao });
   itens.sort((a, b) => a.sev - b.sev);
@@ -410,7 +410,7 @@ function idadeFila(ab) {
   return b;
 }
 
-const nomeSetor = (s) => (s ? String(s).replace(/^[^\p{L}\p{N}]+/u, "").trim() || "Sem setor" : "Sem setor");
+const nomeSetor = (s) => (s ? String(s).replace(/^(?:\d\uFE0F?\u20E3|[^\p{L}\p{N}])+/u, "").trim() || "Sem setor" : "Sem setor");
 async function telaAtendimento() {
   cabecalho("Atendimento", "WhatsApp da Utarget (ZapContábil)");
   carregandoView();
