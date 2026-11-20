@@ -571,12 +571,12 @@ async function telaMargem() {
     if (!w) return toast("Libere pop-ups para abrir o relatório");
     w.document.write('<p style="font:16px Montserrat,Arial,sans-serif;padding:32px">Gerando o relatório…</p>');
     const [tipo, id] = [b.dataset.rel, b.dataset.id];
-    try { const d = await rpcMod("app_mod_margem_detalhe", { p_grupo: tipo === "g" ? id : null, p_entidade: tipo === "e" ? id : null }, true); relatorioCliente(d, { margem: false, janela: w }); }
+    try { const d = await rpcMod("app_mod_margem_detalhe", { p_grupo: tipo === "g" ? id : null, p_entidade: tipo === "e" ? id : null }, true); relatorioCliente(d, { margem: true, janela: w }); }
     catch (err) { w.close(); toast(err.message); }
   }));
 }
 // Botão do relatório de custo ao cliente, ao lado da situação (só diretoria; regra de 19/11/2026)
-const botaoRel = (tipo, id) => (st.eu?.papel === "admin" ? `<button class="rel-b" data-rel="${tipo}" data-id="${esc(String(id))}" title="Relatório de custo para o cliente (PDF)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Relatório</button>` : "");
+const botaoRel = (tipo, id) => (st.eu?.papel === "admin" ? `<button class="rel-b" data-rel="${tipo}" data-id="${esc(String(id))}" title="Relatório de custo e margem para o cliente (PDF)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Relatório</button>` : "");
 
 // análise de rentabilidade (gaveta) de um grupo ou de um CNPJ
 async function analiseMargem(args) {
@@ -604,9 +604,9 @@ async function analiseMargem(args) {
       <div style="font-size:12px;color:var(--ink3);margin-top:6px">Unidades sem horas costumam ter o trabalho lançado na matriz; o resultado que vale é o do grupo.</div>`) : "") +
     bloco("Sinais de atendimento (90 dias)", `<div class="am-g">${kv("Atendimentos WhatsApp", n0(s.tickets_90d))}${kv("Mensagens da Utarget", n0(s.msgs_utarget_90d))}${kv("1ª resposta (mediana)", s.resp_mediana_min == null ? "—" : n0(s.resp_mediana_min) + " min")}${kv("Tarefas abertas no G-Click", n0(s.gc_abertas))}${kv("Atrasadas", n0(s.gc_atrasadas), s.gc_atrasadas ? "t-atr" : "")}${kv("Entregues com atraso", n0(s.gc_entregues_atraso_90d))}</div>`);
   $(".gf", g)?.remove();
-  g.insertAdjacentHTML("beforeend", `<div class="gf" style="flex-wrap:wrap">${st.eu.papel === "admin" ? `<button class="btn s" id="am-pdf" title="Regra de 19/11/2026: só Jean ou Cris enviam, e sem a margem">Relatório de custo para o cliente (PDF)</button>` : ""}${!grupo && d.entidade_id ? `<button class="btn s" id="am-ficha">Abrir ficha da entidade</button>` : ""}${!grupo && d.cnpjs?.[0]?.grupo && d.cnpjs[0].grupo !== d.nome ? `<button class="btn s" id="am-grupo">Ver o grupo ${esc(d.cnpjs[0].grupo)}</button>` : ""}<button class="btn p" id="am-ok">Fechar</button></div>`);
+  g.insertAdjacentHTML("beforeend", `<div class="gf" style="flex-wrap:wrap">${st.eu.papel === "admin" ? `<button class="btn s" id="am-pdf" title="Só Jean ou Cris enviam ao cliente">Relatório de custo para o cliente (PDF)</button>` : ""}${!grupo && d.entidade_id ? `<button class="btn s" id="am-ficha">Abrir ficha da entidade</button>` : ""}${!grupo && d.cnpjs?.[0]?.grupo && d.cnpjs[0].grupo !== d.nome ? `<button class="btn s" id="am-grupo">Ver o grupo ${esc(d.cnpjs[0].grupo)}</button>` : ""}<button class="btn p" id="am-ok">Fechar</button></div>`);
   $("#am-ok", g).onclick = () => fecharGaveta();
-  if ($("#am-pdf", g)) $("#am-pdf", g).onclick = () => relatorioCliente(d, { margem: false }); // regra 19/11/2026: só custo, sem margem
+  if ($("#am-pdf", g)) $("#am-pdf", g).onclick = () => relatorioCliente(d, { margem: true }); // regra 20/11/2026: custo, valor do serviço e margem atual
   if ($("#am-ficha", g)) $("#am-ficha", g).onclick = () => fichaEntidade(d.entidade_id);
   if ($("#am-grupo", g)) $("#am-grupo", g).onclick = () => analiseMargem({ p_grupo: d.cnpjs[0].grupo });
   $$("[data-amc]", g).forEach((t) => (t.onclick = () => analiseMargem({ p_entidade: t.dataset.amc })));
@@ -614,7 +614,7 @@ async function analiseMargem(args) {
 
 
 // relatório imprimível para o cliente (marca Utarget, A4)
-function relatorioCliente(d, { margem = true, janela = null } = {}) {
+function relatorioCliente(d, { margem = true, janela = null } = {}) { // margem atual entra no PDF desde 20/11/2026 (Jean)
   const r = d.resultado || {}, s = d.sinais || {}, grupo = d.tipo === "grupo";
   const hojeBR = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "long", year: "numeric" });
   const mesRef = new Date(String(d.competencia).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -644,7 +644,10 @@ function relatorioCliente(d, { margem = true, janela = null } = {}) {
     dep0 ? `<b>${esc(NOME[dep0.departamento] || dep0.departamento)}</b> concentra <b>${Math.round(dep0.pct)}%</b> do esforço da equipe.` : "",
     grupo && lista.filter((e) => !e.horas).length ? `${lista.filter((e) => !e.horas).length} ${lista.filter((e) => !e.horas).length === 1 ? "empresa não teve" : "empresas não tiveram"} horas lançadas diretamente: o trabalho delas foi registrado na matriz.` : "",
     !margem && cobreV != null && r.honorario ? (cobreV < 100 ? `O honorário atual corresponde a <b>${cobreV}%</b> do valor do serviço entregue no mês (${R(r.honorario)} de ${R(totV)}).` : `O honorário atual cobre o valor do serviço entregue no mês.`) : "",
-    margem && r.margem_pct != null ? (r.resultado < 0 ? `O honorário atual cobre cerca de <b>${cobre}%</b> do custo do trabalho entregue; a diferença hoje é absorvida pela Utarget.` : `O honorário cobre o trabalho entregue e deixa margem de <b>${H1(r.margem_pct)}%</b> para o escritório.`) : "",
+    margem && r.margem_pct != null ? (r.resultado < 0
+      ? `O honorário atual não cobre nem o custo do trabalho: a Utarget tem <b class="neg">prejuízo de ${R(-r.resultado)} por mês</b> com ${grupo ? "o grupo" : "a entidade"} (margem de <b class="neg">${H1(r.margem_pct)}%</b>). Hoje esse prejuízo é pago pelo resultado dos demais clientes do escritório.`
+      : r.margem_pct < alvo * 100 ? `O honorário cobre o custo do trabalho, mas a margem de <b>${H1(r.margem_pct)}%</b> fica abaixo dos <b>${Math.round(alvo * 100)}%</b> que sustentam o escritório.`
+      : `O honorário cobre o trabalho entregue com margem de <b>${H1(r.margem_pct)}%</b>, dentro do mínimo do escritório.`) : "",
   ].filter(Boolean);
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Relatório de consumo — ${esc(d.nome)} — ${esc(mesRef)}</title>
@@ -661,7 +664,7 @@ h1{font-size:22px;font-weight:800;margin:18px 0 2px;letter-spacing:-.3px}h1 span
 .k{background:var(--fundo);border-radius:10px;padding:10px 12px}.k .r{font-size:9.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3)}
 .k .v{font-size:20px;font-weight:800;margin-top:3px;letter-spacing:-.4px}.k .s{font-size:9.5px;color:var(--ink3);margin-top:2px}
 .k.dest{background:var(--azul);color:#fff}.k.dest .r,.k.dest .s{color:rgba(255,255,255,.85)}
-.k.neg .v{color:#C5221F}
+.k.neg .v{color:#C5221F}.k.alerta{background:#FDECEA}.k.alerta .v,.k.alerta .r{color:#B3261E}.k.aviso{background:#FFF4E0}.k.aviso .v{color:#8A5300}.k.bom .v{color:#137333}
 h2{font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--grafite);margin:18px 0 8px;border-left:4px solid var(--laranja);padding-left:8px}
 .dl{display:grid;gap:6px}.dl .l{display:grid;grid-template-columns:160px 1fr 150px;gap:10px;align-items:center;font-size:11px}
 .dl .t{height:12px;background:var(--fundo);border-radius:4px;overflow:hidden}.dl .t i{display:block;height:100%;border-radius:4px}
@@ -686,8 +689,8 @@ td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
   <div class="kp">
     <div class="k"><div class="r">Honorário mensal</div><div class="v">${R(r.honorario)}</div><div class="s">${grupo ? "soma das empresas" : "contrato vigente"}</div></div>
     <div class="k"><div class="r">Horas de trabalho</div><div class="v">${H1(totH)} h</div><div class="s">lançadas pela equipe no mês</div></div>
-    <div class="k ${margem ? "" : "dest"}"><div class="r">Valor do serviço entregue</div><div class="v">${R(totV)}</div><div class="s">horas de cada área × preço-hora de referência</div></div>
-    ${margem ? `<div class="k dest ${r.resultado < 0 ? "" : ""}"><div class="r">Margem para o escritório</div><div class="v">${r.margem_pct == null ? "—" : H1(r.margem_pct) + "%"}</div><div class="s">${r.resultado == null ? "" : (r.resultado < 0 ? "déficit de " : "resultado de ") + R(Math.abs(r.resultado)) + " no mês"}</div></div>` : ""}
+    <div class="k dest"><div class="r">Valor do serviço entregue</div><div class="v">${R(totV)}</div><div class="s">horas de cada área × preço-hora de referência</div></div>
+    ${margem ? `<div class="k ${r.margem_pct == null ? "" : r.margem_pct < 0 ? "alerta" : r.margem_pct < alvo * 100 ? "aviso" : "bom"}"><div class="r">Margem atual do escritório</div><div class="v">${r.margem_pct == null ? "—" : H1(r.margem_pct) + "%"}</div><div class="s">${r.resultado == null ? "" : (r.resultado < 0 ? "prejuízo de " : "resultado de ") + R(Math.abs(r.resultado)) + " no mês · mínimo " + Math.round(alvo * 100) + "%"}</div></div>` : ""}
   </div>
   <h2>Onde o trabalho se concentra</h2>
   <div class="dl">${(d.departamentos || []).map((k) => `<div class="l"><span>${esc(NOME[k.departamento] || k.departamento)}</span><span class="t"><i style="width:${k.pct}%;background:${CORES[k.departamento] || "#999"}"></i></span><span class="n">${H1(k.horas)} h <small>· ${R(preco(k.custo))}</small></span></div>`).join("")}<div class="l" style="border-top:1px solid var(--linha);padding-top:6px"><b>Total</b><span></span><span class="n">${H1(totH)} h <small>· ${R(totV)}</small></span></div></div>
@@ -699,7 +702,7 @@ td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
   </tbody></table>
   <h2>Leitura do mês</h2>
   <div class="box">${leitura.map((t) => `<p>${t}</p>`).join("")}${s.tickets_90d ? `<p>Nos últimos 90 dias foram <b>${s.tickets_90d}</b> atendimentos pelo WhatsApp${s.resp_mediana_min != null ? `, com primeira resposta em <b>${Math.round(s.resp_mediana_min)} min</b> (mediana)` : ""}.</p>` : ""}</div>
-  <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do serviço multiplica as horas de cada área pelo preço-hora de referência da Utarget para aquela área, que cobre a equipe, encargos, benefícios, a estrutura do escritório, os tributos e a margem mínima de operação. ${margem ? "A margem é a diferença entre o honorário, líquido do Simples Nacional, e o valor do trabalho entregue. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
+  <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do serviço multiplica as horas de cada área pelo preço-hora de referência da Utarget para aquela área, que cobre a equipe, encargos, benefícios, a estrutura do escritório, os tributos e a margem mínima de operação. ${margem ? "A margem atual é a diferença entre o honorário, líquido do Simples Nacional, e o custo do trabalho entregue, sobre o honorário líquido. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
   <div class="rod"><span>Utarget Contabilidade &amp; Assessoria · especializada no Terceiro Setor desde 2016</span><span>WhatsApp (11) 2642-8636 · utarget.com.br</span></div>
 </div></body></html>`;
   const w = janela || window.open("", "_blank");
