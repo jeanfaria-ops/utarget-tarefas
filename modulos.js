@@ -488,8 +488,13 @@ async function telaFinanceiro() {
 async function telaMargem() {
   cabecalho("Margem", "Resultado por grupo econômico com custo-hora de cada departamento");
   carregandoView();
-  let d; try { d = await rpcMod("app_mod_margem"); } catch (e) { return erroView(e); }
+  let d, cm; try { [d, cm] = await Promise.all([rpcMod("app_mod_margem"), rpcMod("app_mod_margem_comum").catch(() => null)]); } catch (e) { return erroView(e); }
   const r = d.resumo || {}; const pc = d.parametros_custo || {};
+  // custo comum aberto por natureza (estrutura, gestão, horas internas); aquisição fica fora da margem
+  const cItens = (cm?.itens || []).filter((i) => i.natureza === "comum"), aItens = (cm?.itens || []).filter((i) => i.natureza === "aquisicao");
+  const somaG = (g) => cItens.filter((i) => i.grupo === g).reduce((a, i) => a + +i.valor, 0);
+  const COMUM_G = [["Estrutura", "Estrutura", "Sistemas, ocupação, copa, mentoria, cursos e CRC"], ["Gestão e coordenação", "Gestão", "Parte do tempo de Cris, Jean e Lucas dedicada a gerir o escritório"], ["Horas internas da equipe", "Horas", "Horas que a equipe lançou em atividades internas, sem cliente"]];
+  const aqTot = aItens.reduce((a, i) => a + +i.valor, 0);
   const abertos = st.margemAbertos || (st.margemAbertos = new Set());
   const modo = st.margemModo || (st.margemModo = "grupo");
   let cnpjs = [];
@@ -519,7 +524,9 @@ async function telaMargem() {
   const depOrd = DEPS.map((k) => d.departamentos.find((x) => x.departamento === k)).filter(Boolean);
   const cascata = [{ rot: "Receita", rot2: "líquida", v: recTot, total: true, cor: "var(--c-ok)", sub: "Honorários menos DAS" }]
     .concat(depOrd.map((k) => ({ rot: k.departamento, rot2: `${n0(k.horas_apontadas)}h`, v: -k.custo_direto, cor: DEPC[k.departamento], sub: `Custo direto de quem produz · R$ ${n1(k.custo_direto_hora)}/h` })))
-    .concat([{ rot: "Comum", rot2: "estrutura", v: -dep0.custo_comum_total, cor: "var(--s-neu)", sub: "Sistemas, ocupação, gestão, financeiro, encargos e mentoria" },
+    .concat(cItens.length ? COMUM_G.map(([g, rot, sub]) => ({ rot, rot2: g === "Horas internas da equipe" ? "internas" : g === "Estrutura" ? "do escritório" : "e coordenação", v: -somaG(g), cor: "var(--s-neu)", sub }))
+      : [{ rot: "Comum", rot2: "estrutura", v: -dep0.custo_comum_total, cor: "var(--s-neu)", sub: "Sistemas, ocupação, gestão, financeiro, encargos e mentoria" }])
+    .concat([
              { rot: "Resultado", rot2: "operação", v: resOp, total: true, cor: resOp < 0 ? "var(--c-atr)" : "var(--ok-ink)" }]);
   const pts = comHoras.map((x) => ({ id: x.grupo, x: +x.honorario, y: +x.custo_total, r: +x.horas || 1, st: x.status,
     tip: `<div class="tt">${esc(x.grupo)}${x.cnpjs > 1 ? ` · ${x.cnpjs} CNPJs` : ""}</div>${tipLinha("var(--c-ok)", "Honorário", brl(x.honorario))}${tipLinha(STC[x.status], "Custo de servir", brl(x.custo_total))}${tipLinha("var(--ink)", "Resultado", brl(x.resultado))}<div style="font-size:11.5px;color:var(--ink3);margin-top:4px">${n1(x.horas)}h · margem ${n1(x.margem_pct)}% · clique para a análise</div>` }));
@@ -535,6 +542,9 @@ async function telaMargem() {
           <b>${neg.length}</b> ${neg.length === 1 ? "grupo dá" : "grupos dão"} prejuízo${neg.length ? ` (${neg.slice(0, 3).map((x) => esc(x.grupo)).join(", ")})` : ""}.<br>
           <b>${brl(semDono)}</b> do custo está em horas de clientes sem contrato ativo no banco.</span></div>
       <div>${vizCascata(cascata)}</div></div></section>
+    ${cItens.length ? `<section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Do que é feito o custo comum</h2><p>${brl(cItens.reduce((a, i) => a + +i.valor, 0))} por mês divididos pelas horas de cliente. Aquisição de clientes (comercial e social mídia) não entra: são <b>${brl(aqTot)}</b> por mês fora da margem.</p></div></div>
+        <div class="bi-r c3">${COMUM_G.map(([g, rot]) => `<div><div class="mg-t" style="margin-bottom:6px">${esc(g)} · <b>${brl(somaG(g))}</b></div>${vizBarras(cItens.filter((i) => i.grupo === g).map((i) => ({ rot: i.item.replace(/^(Gestão|Horas internas) · /, ""), valor: brl(i.valor), partes: [{ v: +i.valor, cor: "var(--s-neu)", rot: i.item }] })), { max: Math.max(...cItens.map((i) => +i.valor)) })}</div>`).join("")}</div>
+        <div style="margin-top:12px;font-size:12.5px;color:var(--ink2)"><b>Fora da margem (aquisição):</b> ${aItens.map((i) => `${esc(i.item)} ${brl(i.valor)}`).join(" · ")}</div></section>` : ""}
     <div class="bi-r c2">
       <section class="card"><div class="sec-h"><div><h2>Honorário × custo de servir</h2><p>Cada bolha é um grupo econômico; o tamanho é o número de horas. Acima da linha vermelha, o grupo dá prejuízo.</p></div></div>
         ${legenda([["Prejuízo", STC.critico], ["Abaixo de 40%", STC.atencao], ["Margem saudável", STC.ok], ["Empate", "var(--c-atr)", "ln"], ["Margem-alvo 40%", "var(--ok-ink)", "ln"]])}

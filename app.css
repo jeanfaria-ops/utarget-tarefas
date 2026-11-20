@@ -581,3 +581,5 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .rel-b svg{width:14px;height:14px}
 .rel-b:hover{border-color:var(--azul);background:var(--sup2)}
 .mg-acts .st-b{min-width:66px;text-align:left}
+.bi-r.c3{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:0}
+@media (max-width:1180px){ .bi-r.c3{grid-template-columns:1fr} }
