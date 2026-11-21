@@ -207,8 +207,8 @@ async function telaInicio() {
       pulso("comercial", ab.length, `negócios em aberto · ${parados.length} sem movimento há 14 dias`, "");
       if (parados.length) itens.push({ sev: 2, mod: "Comercial", tit: `${plural(parados.length, "proposta parada", "propostas paradas")} há mais de 14 dias`, ctx: parados.slice(0, 5).map((x) => x.deal).join(", "), acao: () => irPara("comercial") }); },
     atendimento: async () => { const d = await rpcMod("app_mod_atendimento"); const par = d.setores.reduce((a, s) => a + s.parados_24h, 0);
-      pulso("atendimento", par, `conversas paradas há mais de 24h`, par ? "risco" : "");
-      d.setores.filter((s) => s.parados_24h > 0).forEach((s) => itens.push({ sev: s.parados_24h > 10 ? 1 : 2, mod: "Atendimento", tit: `${s.parados_24h} conversas paradas há mais de 24h`, ctx: nomeSetor(s.setor), acao: () => irPara("atendimento") })); },
+      pulso("atendimento", par, `conversas paradas há mais de 24h úteis`, par ? "risco" : "");
+      d.setores.filter((s) => s.parados_24h > 0).forEach((s) => itens.push({ sev: s.parados_24h > 10 ? 1 : 2, mod: "Atendimento", tit: `${s.parados_24h} conversas paradas há mais de 24h úteis`, ctx: nomeSetor(s.setor), acao: () => irPara("atendimento") })); },
     financeiro: async () => { const d = await rpcMod("app_mod_financeiro"); const i = d.indicadores || {};
       pulso("financeiro", i.folego_meses == null ? "—" : n1(i.folego_meses), `meses de fôlego de caixa · MRR ${brl(i.mrr)}`, i.folego_meses < 1 ? "atr" : "");
       if (i.folego_meses != null && i.folego_meses < 1) itens.push({ sev: 1, mod: "Financeiro", tit: `Caixa cobre ${n1(i.folego_meses)} mês de despesa`, ctx: `saldo ${brl(i.saldo_bancos)} · despesa média ${brl(i.despesa_media_3m)}`, acao: () => irPara("financeiro") });
@@ -422,9 +422,9 @@ async function telaComercial() {
 }
 
 // ---------------------------------------------------------------- ATENDIMENTO
-function idadeFila(ab) {
+function idadeFila(ab) { // em horas úteis: sábado, domingo e feriado não contam
   const b = [["< 4h", 4], ["4–24h", 24], ["1–3 dias", 72], ["3–7 dias", 168], ["7–30 dias", 720], ["> 30 dias", 1e9]].map(([rot, lim]) => ({ rot, lim, partes: { Atendimentos: 0 } }));
-  ab.forEach((x) => { const h = x.ultima_msg_em ? (Date.now() - new Date(x.ultima_msg_em)) / 36e5 : 1e8; b.find((k) => h < k.lim).partes.Atendimentos++; });
+  ab.forEach((x) => { const h = x.horas_uteis != null ? +x.horas_uteis : x.ultima_msg_em ? (Date.now() - new Date(x.ultima_msg_em)) / 36e5 : 1e8; b.find((k) => h < k.lim).partes.Atendimentos++; });
   return b;
 }
 
@@ -436,27 +436,27 @@ async function telaAtendimento() {
   cabecalho("Atendimento", `WhatsApp da Utarget (ZapContábil) · espelho de ${quando(d.coletado_em)}`);
   const ab = d.setores.reduce((a, s) => a + s.abertos, 0), par = d.setores.reduce((a, s) => a + s.parados_24h, 0), t30 = d.setores.reduce((a, s) => a + s.tickets_30d, 0);
   const agora = Date.now(), horas = (ts) => (ts ? Math.round((agora - new Date(ts)) / 36e5) : null);
-  const maisParado = d.abertos.filter((x) => x.ultima_msg_em).sort((a, b) => new Date(a.ultima_msg_em) - new Date(b.ultima_msg_em))[0];
-  const hMax = maisParado ? horas(maisParado.ultima_msg_em) : null;
+  const maisParado = d.abertos.filter((x) => x.horas_uteis != null).sort((a, b) => +b.horas_uteis - +a.horas_uteis)[0];
+  const hMax = maisParado ? Math.round(+maisParado.horas_uteis) : null;
   const piorS = d.setores.filter((s) => s.parados_24h > 0).sort((a, b) => b.parados_24h - a.parados_24h)[0];
   const l = d.abertos.filter((x) => casa(x, ["setor", "atendente", "sigla"]));
   $("#view").innerHTML = `
     <div class="kpis k4">
       ${kpiM("Abertos agora", ab, "abertos ou pendentes")}
-      ${kpiM("Parados há mais de 24h", par, "última mensagem há mais de um dia", par ? "atr" : "ok")}
+      ${kpiM("Parados há mais de 24h úteis", par, "sábados, domingos e feriados não contam", par ? "atr" : "ok")}
       ${kpiM("Atendimentos em 30 dias", t30, "todos os setores")}
-      ${kpiM("Parado há mais tempo", hMax == null ? "—" : hMax >= 48 ? Math.round(hMax / 24) + "<small>d</small>" : hMax + "<small>h</small>", maisParado ? `#${esc(String(maisParado.ticket_id))} · ${esc(nomeSetor(maisParado.setor))}` : "fila vazia", hMax > 72 ? "atr" : "")}
+      ${kpiM("Parado há mais tempo", hMax == null ? "—" : hMax >= 48 ? Math.round(hMax / 24) + "<small>d úteis</small>" : hMax + "<small>h úteis</small>", maisParado ? `#${esc(String(maisParado.ticket_id))} · ${esc(nomeSetor(maisParado.setor))}` : "fila vazia", hMax > 72 ? "atr" : "")}
     </div>
     <div class="bi-r c2b">
-      <section class="card"><div class="sec-h"><div><h2>Fila por setor</h2><p>Abertos agora; em vermelho, os parados há mais de 24h.</p></div></div>
-        ${legenda([["Parado há mais de 24h", "var(--c-atr)"], ["Movimentado nas últimas 24h", "var(--s1)"]])}
+      <section class="card"><div class="sec-h"><div><h2>Fila por setor</h2><p>Abertos agora; em vermelho, os parados há mais de 24h úteis.</p></div></div>
+        ${legenda([["Parado há mais de 24h úteis", "var(--c-atr)"], ["Movimentado", "var(--s1)"]])}
         ${vizBarras(d.setores.filter((x) => x.abertos).map((x) => ({ rot: nomeSetor(x.setor), valor: x.abertos, partes: [{ v: x.parados_24h, cor: "var(--c-atr)", rot: "Parados > 24h" }, { v: x.abertos - x.parados_24h, cor: "var(--s1)", rot: "Recentes" }] })))}</section>
-      <section class="card"><div class="sec-h"><div><h2>Há quanto tempo a conversa está parada</h2><p>Atendimentos abertos pela idade da última mensagem.</p></div></div>
+      <section class="card"><div class="sec-h"><div><h2>Há quanto tempo a conversa está parada</h2><p>Idade útil da última mensagem: sábado, domingo e feriado não contam.</p></div></div>
         ${vizColunas(idadeFila(d.abertos), ["Atendimentos"], { "Atendimentos": "var(--s1)" }, { H: 200 })}</section>
     </div>
     <div class="grade">
-      <section class="card"><div class="sec-h"><div><h2>Abertos, do mais parado ao mais recente</h2><p>Responder e transferir continua no ZapContábil.</p></div></div>${tabela([["Ticket"], ["Setor"], ["Cliente"], ["Atendente", "hm"], ["Parado", "n"]],
-        l.map((x) => { const h = horas(x.ultima_msg_em); return `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">#${esc(x.ticket_id)}</td><td style="font-size:12.5px">${esc(nomeSetor(x.setor))}</td><td>${esc(x.sigla || "—")}</td><td class="hm">${esc(curto(x.atendente || "—"))}</td><td class="n">${h == null ? "—" : `<span class="pill ${h > 24 ? "atr" : h > 4 ? "risco" : "ok"}">${h < 48 ? h + "h" : Math.round(h / 24) + "d"}</span>`}</td></tr>`; }), "Nenhum atendimento aberto.")}</section>
+      <section class="card"><div class="sec-h"><div><h2>Abertos, do mais parado ao mais recente</h2><p>Responder e transferir continua no ZapContábil.</p></div></div>${tabela([["Ticket"], ["Setor"], ["Cliente"], ["Atendente", "hm"], ["Parado (úteis)", "n"]],
+        l.map((x) => { const h = x.horas_uteis != null ? Math.round(+x.horas_uteis) : horas(x.ultima_msg_em); return `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">#${esc(x.ticket_id)}</td><td style="font-size:12.5px">${esc(nomeSetor(x.setor))}</td><td>${esc(x.sigla || "—")}</td><td class="hm">${esc(curto(x.atendente || "—"))}</td><td class="n">${h == null ? "—" : `<span class="pill ${h > 24 ? "atr" : h > 4 ? "risco" : "ok"}">${h < 48 ? h + "h úteis" : Math.round(h / 24) + "d úteis"}</span>`}</td></tr>`; }), "Nenhum atendimento aberto.")}</section>
       <div style="display:grid;gap:16px;align-content:start">
         <section class="card"><div class="sec-h"><div><h2>Setores</h2><p>Mediana da 1ª resposta nos últimos 30 dias.</p></div></div>${tabela([["Setor"], ["Abertos", "n"], ["> 24h", "n"], ["1ª resp.", "n"]],
           d.setores.map((s) => `<tr style="cursor:default"><td style="font-size:12.5px" class="forte">${esc(nomeSetor(s.setor))}</td><td class="n">${s.abertos}</td><td class="n">${s.parados_24h ? `<span class="pill atr">${s.parados_24h}</span>` : "0"}</td><td class="n">${s.mediana_resp_min == null ? "—" : n0(s.mediana_resp_min) + " min"}</td></tr>`))}</section>
@@ -464,7 +464,7 @@ async function telaAtendimento() {
           d.clientes.map((c) => `<tr data-ent="${c.entidade_id}"><td class="forte">${esc(c.sigla)}</td><td class="n">${c.tickets}</td><td class="n">${c.msgs_cliente ?? "—"}</td></tr>`))}</section>
       </div>
     </div>
-    ${linhaAgora(par ? `Zerar as <b>${par}</b> conversas paradas há mais de 24h — começar por <b>${esc(nomeSetor(piorS.setor))}</b> (${piorS.parados_24h}). Responder e transferir é no ZapContábil.` : "Nenhuma conversa parada há mais de 24h.")}`;
+    ${linhaAgora(par ? `Zerar as <b>${par}</b> conversas paradas há mais de 24h úteis — começar por <b>${esc(nomeSetor(piorS.setor))}</b> (${piorS.parados_24h}). Responder e transferir é no ZapContábil.` : "Nenhuma conversa parada há mais de 24h úteis.")}`;
   ligaIr($("#view"));
   ligaTips($("#view"));
 }
