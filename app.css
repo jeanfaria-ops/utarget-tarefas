@@ -586,3 +586,22 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .bi-r.c4{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:0}
 @media (max-width:1280px){ .bi-r.c4{grid-template-columns:repeat(2,minmax(0,1fr))} }
 @media (max-width:760px){ .bi-r.c4{grid-template-columns:1fr} }
+
+/* v1.0 leis de UX: vermelho só para multa/prejuízo/bloqueio; progresso da semana; escopo no topo; alvos maiores */
+.fi.s1 .fb{background:var(--c-risco);opacity:1}
+.fi.s2 .fb{background:var(--s-neu)}
+.ini-h{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.prog-s{display:grid;gap:5px;margin-top:10px;max-width:460px}
+.prog-s .tr{display:block;height:8px;border-radius:4px;background:var(--sup3);overflow:hidden}
+.prog-s .tr i{display:block;height:100%;background:var(--ok-ink);border-radius:4px}
+.prog-s small{color:var(--ink3);font-size:12.5px}
+.prog-s small b{color:var(--ink)}
+.top-seg{flex:none}
+@media (max-width:960px){.top-seg{display:none}}
+.chip{min-height:36px}
+.st-b{padding:7px 6px}
+@media (pointer:coarse){
+  .chip,.seg button,.tema button,.rel-b,.mais{min-height:44px}
+  .st-b{padding:11px 8px}
+  .cap-m .sg{min-height:40px}
+}

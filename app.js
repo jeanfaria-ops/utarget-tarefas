@@ -158,11 +158,6 @@ function casca() {
       <nav class="nav" aria-label="Principal">
         ${abas.map(([k, n, ic], i) => `${grupoTar.includes(k) && !grupoTar.includes(abas[i - 1]?.[0]) ? '<div class="rot n1">Tarefas</div>' : ""}${!grupoTar.includes(k) && k !== "inicio" && (grupoTar.includes(abas[i - 1]?.[0]) || abas[i - 1]?.[0] === "inicio") ? '<div class="rot n1">Módulos</div>' : ""}<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span>${k === "entrada" && nEntrada ? `<span class="badge">${nEntrada}</span>` : ""}</button>`).join("")}
       </nav>
-      <div class="rot">Visão das tarefas</div>
-      <div class="seg" role="group" aria-label="Escopo">
-        <button data-e="minhas" aria-pressed="${st.escopo === "minhas"}">Minhas</button>
-        <button data-e="equipe" aria-pressed="${st.escopo === "equipe"}">Equipe</button>
-      </div>
       <div class="rot">Tema</div>
       <div class="tema" role="group" aria-label="Tema">
         ${[["auto", "Auto"], ["light", "Claro"], ["dark", "Escuro"]].map(([k, n]) => `<button data-t="${k}" aria-pressed="${tema === k}">${n}</button>`).join("")}
@@ -175,6 +170,7 @@ function casca() {
       <header class="top"><div class="in">
         <img class="mlogo" src="logo-claro.svg" alt="Utarget">
         <div class="tit"><h1 id="titulo"></h1><div class="sub" id="subtitulo"></div></div>
+        ${temMod("tarefas") ? `<div class="seg top-seg" role="group" aria-label="Visão das tarefas"><button data-e="minhas" aria-pressed="${st.escopo === "minhas"}">Minhas</button><button data-e="equipe" aria-pressed="${st.escopo === "equipe"}">Equipe</button></div>` : ""}
         <label class="busca"><span class="sr" hidden>Buscar</span>${I.busca}<input id="q" type="search" placeholder="Buscar tarefa, cliente, pessoa…" value="${esc(st.f.q)}" autocomplete="off"><kbd>/</kbd></label>
         ${podeCriar() ? `<button class="btn p" id="nova" title="Nova tarefa (N)">${I.mais}<span class="nv-t">Nova tarefa</span></button>` : ""}
         <button class="ib" id="att" title="Atualizar" aria-label="Atualizar">${I.att}</button>

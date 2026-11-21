@@ -156,7 +156,8 @@ async function telaInicio() {
   cabecalho("Início", extenso(hoje));
   const outros = (st.mods || []).filter((x) => !["tarefas", "acessos"].includes(x.codigo));
   $("#view").innerHTML = `
-    <div class="ini-h"><h2>${h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"}, ${esc(limpa(st.eu.nome).split(" ")[0])}.</h2><p id="ini-frase">Juntando o que pede atenção nas suas áreas…</p></div>
+    <div class="ini-h"><div><h2>${h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"}, ${esc(limpa(st.eu.nome).split(" ")[0])}.</h2><p id="ini-frase">Juntando o que pede atenção nas suas áreas…</p></div>
+      <button class="btn p" id="ini-go" hidden>Resolver o mais grave</button></div>
     <div class="ini">
       <section class="card ini-f"><div class="sec-h"><div><h2>Precisa de você</h2><p>Do mais grave ao menos grave. Clique para ir direto ao item.</p></div></div>
         <div id="feed"><div class="sk" style="height:260px"></div></div></section>
@@ -167,13 +168,18 @@ async function telaInicio() {
     </div>`;
   ligaIr();
   let itens = [];
+  const gSem = { feitas: null, multa: null }; // progresso da semana no G-Click (efeito Zeigarnik)
   const pulso = (cod, n, sub, cls) => { const b = $(`#pl-${cod}`); if (b) { $(".pn", b).className = "pn " + (cls ? "t-" + cls : ""); $(".pn", b).textContent = n; $("small", b).textContent = sub; } };
   const fontes = {
     gclick: async () => { const d = await rpcMod("app_mod_gclick"); const ab = d.tarefas.filter((t) => t.ab && t.minha);
       const atr = ab.filter((t) => t.venc && t.venc < hoje), v7 = ab.filter((t) => t.venc && t.venc >= hoje && diff(t.venc, hoje) <= 7);
-      pulso("gclick", atr.length, `${ab.length} abertas no G-Click · ${v7.length} vencem em 7 dias`, atr.length ? "atr" : "");
       const vai = (chip) => () => { st.escopo = "minhas"; ls.set("escopo", "minhas"); st.fg = { ...(st.fg || { dep: "", resp: "", cli: "", cat: "todas", lim: 40 }), chip, dep: "", resp: "", cli: "" }; casca(); irPara("gclick"); };
       const multa = [...atr, ...v7].filter((t) => t.multa);
+      pulso("gclick", atr.length, `${ab.length} abertas no G-Click · ${v7.length} vencem em 7 dias`, multa.length ? "atr" : atr.length ? "risco" : "");
+      const baseE = st.escopo === "minhas" ? d.tarefas.filter((t) => t.minha) : d.tarefas;
+      const dow = new Date(hoje + "T12:00:00Z").getUTCDay(), segunda = addD(hoje, -((dow + 6) % 7));
+      gSem.feitas = baseE.filter((t) => !t.ab && t.conc && t.conc >= segunda && ["Concluída", "Finalizada", "Retificada"].includes(t.st)).length;
+      gSem.multa = baseE.filter((t) => t.ab && t.multa && t.venc && t.venc <= addD(hoje, 7)).length;
       multa.slice(0, 4).forEach((t) => itens.push({ sev: 0, mod: "Prazos", tit: `${t.nome} · ${t.cli || "sem cliente"}`, ctx: t.venc < hoje ? `venceu ${dm(t.venc)} · gera multa` : `vence ${dm(t.venc)} · gera multa`, acao: vai("multa") }));
       const recentes = atr.filter((t) => !t.multa && diff(hoje, t.venc) <= 30);
       if (recentes.length) itens.push({ sev: 1, mod: "Prazos", tit: `${plural(recentes.length, "tarefa sua atrasou", "tarefas suas atrasaram")} nos últimos 30 dias`, ctx: topN(recentes, (t) => t.nome, 3).map((o) => `${o.k} (${o.n})`).join(" · "), acao: vai("atr") });
@@ -198,7 +204,7 @@ async function telaInicio() {
       pulso("comercial", ab.length, `negócios em aberto · ${parados.length} sem movimento há 14 dias`, "");
       if (parados.length) itens.push({ sev: 2, mod: "Comercial", tit: `${plural(parados.length, "proposta parada", "propostas paradas")} há mais de 14 dias`, ctx: parados.slice(0, 5).map((x) => x.deal).join(", "), acao: () => irPara("comercial") }); },
     atendimento: async () => { const d = await rpcMod("app_mod_atendimento"); const par = d.setores.reduce((a, s) => a + s.parados_24h, 0);
-      pulso("atendimento", par, `conversas paradas há mais de 24h`, par ? "atr" : "");
+      pulso("atendimento", par, `conversas paradas há mais de 24h`, par ? "risco" : "");
       d.setores.filter((s) => s.parados_24h > 0).forEach((s) => itens.push({ sev: s.parados_24h > 10 ? 1 : 2, mod: "Atendimento", tit: `${s.parados_24h} conversas paradas há mais de 24h`, ctx: nomeSetor(s.setor), acao: () => irPara("atendimento") })); },
     financeiro: async () => { const d = await rpcMod("app_mod_financeiro"); const i = d.indicadores || {};
       pulso("financeiro", i.folego_meses == null ? "—" : n1(i.folego_meses), `meses de fôlego de caixa · MRR ${brl(i.mrr)}`, i.folego_meses < 1 ? "atr" : "");
@@ -206,7 +212,7 @@ async function telaInicio() {
       (d.inadimplencia || []).forEach((x) => itens.push({ sev: x.dias > 30 ? 1 : 2, mod: "Financeiro", tit: `${x.cliente} em atraso`, ctx: `${brl(x.em_aberto)} · ${x.dias} dias`, acao: () => irPara("financeiro") })); },
     margem: async () => { const d = await rpcMod("app_mod_margem"); const cr = (d.grupos || []).filter((x) => x.resultado != null && x.resultado < 0);
       pulso("margem", cr.length, `grupos econômicos no prejuízo`, cr.length ? "atr" : "");
-      cr.forEach((x) => itens.push({ sev: 1, mod: "Margem", tit: `${x.grupo} dá prejuízo de ${brl(-x.resultado)} por mês`, ctx: `margem ${n1(x.margem_pct)}% · mais pesa: ${x.deptos?.[0]?.departamento || "—"}${x.cnpjs > 1 ? " · " + x.cnpjs + " CNPJs" : ""}`, acao: () => irPara("margem") })); },
+      cr.forEach((x) => itens.push({ sev: 0, mod: "Margem", tit: `${x.grupo} dá prejuízo de ${brl(-x.resultado)} por mês`, ctx: `margem ${n1(x.margem_pct)}% · mais pesa: ${x.deptos?.[0]?.departamento || "—"}${x.cnpjs > 1 ? " · " + x.cnpjs + " CNPJs" : ""}`, acao: () => irPara("margem") })); },
   };
   await Promise.all((temMod("tarefas") ? [{ codigo: "gclick" }] : []).concat(outros).map((x) => (fontes[x.codigo] ? fontes[x.codigo]().catch((e) => pulso(x.codigo, "!", e.message, "atr")) : null)));
   if (st.view !== "inicio") return;
@@ -217,7 +223,10 @@ async function telaInicio() {
     ctx: [...new Set(g.map((x) => String(x.ctx || "").split(" · ")[0]))].join(", "), acao: MODV[g[0].mod] ? () => irPara(MODV[g[0].mod]) : g[0].acao });
   itens.sort((a, b) => a.sev - b.sev);
   const graves = itens.filter((i) => i.sev <= 1).length;
-  $("#ini-frase").innerHTML = itens.length ? `<b>${plural(itens.length, "ponto pede", "pontos pedem")}</b> sua atenção${graves ? `, <b>${graves}</b> ${graves === 1 ? "grave" : "graves"}` : ""}.` : "Nada pedindo atenção agora.";
+  $("#ini-frase").innerHTML = (gSem.multa ? `<b style="color:var(--atr-ink)">${plural(gSem.multa, "tarefa gera", "tarefas geram")} multa</b> se ficarem paradas esta semana. ` : "")
+    + (itens.length ? `<b>${plural(itens.length, "ponto pede", "pontos pedem")}</b> sua atenção${graves ? `, <b>${graves}</b> ${graves === 1 ? "grave" : "graves"}` : ""}.` : "Nada pedindo atenção agora.")
+    + (gSem.feitas != null ? ` <span style="color:var(--ink3)">${n0(gSem.feitas)} baixadas no G-Click desde segunda.</span>` : "");
+  const go = $("#ini-go"); if (go && itens.length) { go.hidden = false; go.onclick = () => itens[0].acao(); }
   let lim = 12;
   const pinta = () => {
     $("#feed").innerHTML = itens.length ? `<div class="fd">${itens.slice(0, lim).map((it, k) => `<button class="fi s${it.sev}" data-k="${k}"><span class="fb"></span><span class="ft"><b>${esc(it.tit)}</b><small>${esc(it.ctx || "")}</small></span><span class="fm">${esc(it.mod)}</span>${I.seta}</button>`).join("")}</div>
@@ -779,7 +788,7 @@ function menuMais() {
 // Fonte: gclick_tarefas + gclick_resp, coletados pela edge function coletor-gclick-tarefas (dias úteis, a cada 2h).
 // O G-Click continua sendo onde a tarefa é executada e baixada; aqui é leitura para decidir.
 const DEP_CURTO = (d) => ({ "Contabilidade": "Contábil", "Departamento Pessoal": "DP", "Certificações (CENTS, CMDCA, CRCE, ETC )": "Certificações", "Sucesso do Cliente": "CS" }[d] || d || "Sem departamento");
-const GC_COR = { atr: "var(--c-atr)", v7: "var(--c-risco)", ok: "var(--c-ok)", multa: "var(--c-atr)", sem: "var(--s-neu)" };
+const GC_COR = { atr: "var(--c-risco)", v7: "var(--s-neu)", ok: "var(--c-ok)", multa: "var(--c-atr)", sem: "var(--s-neu)" }; // vermelho é só da multa (lei de Von Restorff)
 function gcSituacao(t, hoje) {
   if (!t.ab) return "feita";
   if (!t.venc) return "ok";
@@ -793,7 +802,9 @@ async function telaGclick() {
   let d; try { d = await rpcMod("app_mod_gclick"); } catch (e) { return erroView(e); }
   const f = st.fg || (st.fg = { chip: "atr", dep: "", resp: "", cli: "", cat: "todas", lim: 40 });
   const nomeP = (n) => (n === n.toUpperCase() ? n.toLowerCase().replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()) : n);
-  const todas = d.tarefas.map((t) => ({ ...t, dep: DEP_CURTO(t.dep), sit: gcSituacao(t, hoje), resp: [...new Set((t.resp || []).map(nomeP))] }));
+  const todas = d.tarefas.map((t) => ({ ...t, dep: DEP_CURTO(t.dep), sit: gcSituacao(t, hoje), resp: [...new Set((t.resp || []).map(nomeP))],
+    respA: [...new Set((t.resp_ativos || []).map(nomeP))], interna: /utarget/i.test(t.cli || "") })); // respA = equipe atual; interna = tarefa da própria Utarget
+  const dow = new Date(hoje + "T12:00:00Z").getUTCDay(), segunda = addD(hoje, -((dow + 6) % 7)), domingo = addD(segunda, 6);
   const pinta = () => {
     const U = todas.filter((t) => (st.escopo === "minhas" ? t.minha : true) && (f.cat === "todas" || t.cat === f.cat));
     const ab = U.filter((t) => t.ab), atr = ab.filter((t) => t.sit === "atr"), v7 = ab.filter((t) => t.sit === "v7");
@@ -803,6 +814,9 @@ async function telaGclick() {
     const atrM = atr.filter((t) => t.multa), v7M = v7.filter((t) => t.multa);
     const velhas = atr.filter((t) => diff(hoje, t.venc) > 60);
     const semResp = ab.filter((t) => !t.resp.length).length;
+    const feitasSem = U.filter((t) => !t.ab && t.conc && t.conc >= segunda && ["Concluída", "Finalizada", "Retificada"].includes(t.st));
+    const focoAb = ab.filter((t) => t.venc && t.venc <= domingo);
+    const pctSem = feitasSem.length + focoAb.length ? Math.round((100 * feitasSem.length) / (feitasSem.length + focoAb.length)) : null;
     const cober = d.abertas_total ? Math.round((100 * d.abertas_com_resp) / d.abertas_total) : 0;
     cabecalho("Central de prazos", `Espelho do G-Click · atualizado ${quando(d.coletado_em)} · ${st.escopo === "minhas" ? "minhas tarefas" : "visão da equipe"}`);
 
@@ -823,15 +837,18 @@ async function telaGclick() {
       return { rot: i === 0 ? "Hoje" : String(+dd.slice(8)), tit: `${dsem(dd)} ${dm(dd)}`, partes: { "Com multa": l.filter((t) => t.multa).length, "Sem multa": l.filter((t) => !t.multa).length }, lista: resumo(l, (t) => t.nome) }; });
     // carga por pessoa
     const porResp = new Map();
-    ab.forEach((t) => (t.resp.length ? t.resp : ["Sem responsável"]).forEach((r) => { const o = porResp.get(r) || { k: r, atr: 0, v7: 0, ok: 0, multa: 0 }; o[t.sit]++; if (t.multa && t.sit === "atr") o.multa++; porResp.set(r, o); }));
-    const resp = [...porResp.values()].filter((o) => o.k !== "Sem responsável").sort((a, b) => b.atr - a.atr || b.atr + b.v7 + b.ok - (a.atr + a.v7 + a.ok)).slice(0, 12);
+    ab.forEach((t) => t.respA.forEach((r) => { const o = porResp.get(r) || { k: r, atr: 0, v7: 0, ok: 0, multa: 0 }; o[t.sit]++; if (t.multa && ["atr", "v7"].includes(t.sit)) o.multa++; porResp.set(r, o); }));
+    const resp = [...porResp.values()].sort((a, b) => b.multa - a.multa || b.atr - a.atr || b.atr + b.v7 + b.ok - (a.atr + a.v7 + a.ok)).slice(0, 12);
     // departamentos
     const deps = [...new Set(U.map((t) => t.dep))].map((k) => { const a = ab.filter((t) => t.dep === k), e = ent.filter((t) => t.dep === k), p = e.filter((t) => !t.venc || t.conc <= t.venc);
       return { k, ab: a.length, atr: a.filter((t) => t.sit === "atr").length, multa: a.filter((t) => t.sit === "atr" && t.multa).length, v7: a.filter((t) => t.sit === "v7").length, ent: e.length, pct: e.length ? Math.round((100 * p.length) / e.length) : null }; })
       .filter((x) => x.ab || x.ent).sort((a, b) => b.atr - a.atr || b.ab - a.ab);
-    // clientes e obrigações
-    const clis = topN(atr, (t) => t.cli || "Sem cliente", 10).map((o) => ({ ...o, ent: atr.find((t) => (t.cli || "Sem cliente") === o.k)?.ent, multa: o.l.filter((t) => t.multa).length }));
-    const obr = topN(atr, (t) => t.nome, 8).map((o) => ({ ...o, multa: o.l.filter((t) => t.multa).length, clis: new Set(o.l.map((t) => t.cli)).size }));
+    const piorDep = deps.filter((x) => x.ent >= 10 && x.pct != null).sort((a, b) => a.pct - b.pct)[0];
+    const fraseDep = piorDep && piorDep.pct < 70 ? ` <b>${esc(piorDep.k)}</b> entregou só <b>${piorDep.pct}%</b> no prazo nos últimos 90 dias.` : "";
+    // clientes e obrigações (tarefas internas da Utarget ficam fora do ranking de clientes)
+    const atrInt = atr.filter((t) => t.interna).length;
+    const clis = topN(atr.filter((t) => !t.interna), (t) => t.cli || "Sem cliente", 10).map((o) => ({ ...o, ent: atr.find((t) => (t.cli || "Sem cliente") === o.k)?.ent, multa: o.l.filter((t) => t.multa).length }));
+    const obr = topN(atr.filter((t) => !t.interna), (t) => t.nome, 8).map((o) => ({ ...o, multa: o.l.filter((t) => t.multa).length, clis: new Set(o.l.map((t) => t.cli)).size }));
 
     // lista filtrada
     const chips = { atr: (t) => t.ab && t.sit === "atr", multa: (t) => t.ab && t.multa && ["atr", "v7"].includes(t.sit), v7: (t) => t.ab && t.sit === "v7", ab: (t) => t.ab, ent: (t) => !t.ab && t.conc && ["Concluída", "Finalizada", "Retificada"].includes(t.st), tarde: (t) => !t.ab && t.conc && t.venc && t.conc > t.venc && ["Concluída", "Finalizada", "Retificada"].includes(t.st) };
@@ -842,20 +859,21 @@ async function telaGclick() {
     const ativo = [f.dep && ["dep", "Depto: " + f.dep], f.resp && ["resp", "Pessoa: " + curto(f.resp)], f.cli && ["cli", "Cliente: " + f.cli]].filter(Boolean);
 
     $("#view").innerHTML = `
-    <div class="saud"><div><h2>${atr.length ? `${atr.length} atrasadas` : "Em dia"}${atrM.length ? ` · <span style="color:var(--atr-ink)">${atrM.length} com multa</span>` : ""}</h2><p>${frase}</p></div>
+    <div class="saud"><div><h2>${atr.length ? `${atr.length} atrasadas` : "Em dia"}${atrM.length ? ` · <span style="color:var(--atr-ink)">${atrM.length} com multa</span>` : ""}</h2><p>${frase}${fraseDep}</p>
+      <div class="prog-s"><span class="tr"><i style="width:${pctSem ?? 0}%"></i></span><small><b>${n0(feitasSem.length)}</b> baixadas no G-Click desde segunda${feitasSem.filter((t) => t.multa).length ? ` (${feitasSem.filter((t) => t.multa).length} com multa)` : ""} · <b>${n0(focoAb.length)}</b> da semana ainda abertas</small></div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${segV("gcat", [["todas", "Tudo"], ["Obrigacao", "Obrigações"], ["Solicitacao", "Solicitações"]], f.cat)}</div></div>
     <div class="kpis">
-      ${kpiG("ab", "Abertas", n0(ab.length), `${plural(new Set(ab.map((t) => t.cli)).size, "cliente", "clientes")}`, "")}
-      ${kpiG("atr", "Atrasadas", n0(atr.length), atrM.length ? `<b>${atrM.length}</b> com multa` : "nenhuma com multa", "atr")}
-      ${kpiG("v7", "Vencem em 7 dias", n0(v7.length), v7M.length ? `<b>${v7M.length}</b> com multa` : "nenhuma com multa", "risco")}
+      ${kpiG("ab", "Abertas", n0(ab.length), `${plural(new Set(ab.filter((t) => !t.interna).map((t) => t.cli)).size, "cliente", "clientes")}${ab.filter((t) => t.interna).length ? ` · ${ab.filter((t) => t.interna).length} internas da Utarget` : ""}`, "")}
+      ${kpiG("atr", "Atrasadas", n0(atr.length), atrM.length ? `<b style="color:var(--atr-ink)">${atrM.length}</b> com multa` : "nenhuma com multa", "risco")}
+      ${kpiG("v7", "Vencem em 7 dias", n0(v7.length), v7M.length ? `<b style="color:var(--atr-ink)">${v7M.length}</b> com multa` : "nenhuma com multa", "")}
       ${kpiG("ent", "Entregues no prazo", pct == null ? "—" : pct + "<small>%</small>", ent.length ? `<b>${n0(noPrazo.length)}</b> de ${n0(ent.length)} em 90 dias` : "sem entregas em 90 dias", "ok")}
       ${kpiG("semresp", "Sem responsável", n0(semResp), `nomes lidos em ${cober}% das abertas`, "")}
     </div>
     <div class="grade">
-      <section class="card"><div class="sec-h"><div><h2>Carga por pessoa</h2><p>Tarefas abertas em que a pessoa consta como responsável no G-Click. Clique para filtrar. As sem responsável lido ficam no indicador acima.</p></div></div>
-        ${legenda([["Atrasada", GC_COR.atr], ["Vence em 7 dias", GC_COR.v7], ["Em dia", GC_COR.ok]])}
-        ${resp.length ? vizBarras(resp.map((o) => ({ rot: o.k === "Sem responsável" ? o.k : curto(o.k), attr: `data-fresp="${esc(o.k)}" style="cursor:pointer"`, valor: `${o.atr ? `<b style="color:var(--atr-ink)">${o.atr}</b> / ` : ""}${o.atr + o.v7 + o.ok}`,
-          partes: [{ v: o.atr, cor: GC_COR.atr, rot: `Atrasadas${o.multa ? " (" + o.multa + " com multa)" : ""}` }, { v: o.v7, cor: GC_COR.v7, rot: "Vencem em 7 dias" }, { v: o.ok, cor: GC_COR.ok, rot: "Em dia" }] }))) : '<div class="vazio-g">Sem tarefas abertas.</div>'}
+      <section class="card"><div class="sec-h"><div><h2>Carga por pessoa</h2><p>Tarefas abertas por responsável no G-Click, só da equipe atual (contas de sistema e desligados ficam de fora). Clique para filtrar.</p></div></div>
+        ${legenda([["Com multa", GC_COR.multa], ["Atrasada", GC_COR.atr], ["Vence em 7 dias", GC_COR.v7], ["Em dia", GC_COR.ok]])}
+        ${resp.length ? vizBarras(resp.map((o) => ({ rot: curto(o.k), attr: `data-fresp="${esc(o.k)}" style="cursor:pointer"`, valor: `${o.atr ? `<b${o.multa ? ' style="color:var(--atr-ink)"' : ""}>${o.atr}</b> / ` : ""}${o.atr + o.v7 + o.ok}`,
+          partes: [{ v: o.multa, cor: GC_COR.multa, rot: "Com multa à vista" }, { v: Math.max(0, o.atr - o.multa), cor: GC_COR.atr, rot: "Atrasadas sem multa" }, { v: o.v7, cor: GC_COR.v7, rot: "Vencem em 7 dias" }, { v: o.ok, cor: GC_COR.ok, rot: "Em dia" }] }))) : '<div class="vazio-g">Sem tarefas abertas.</div>'}
       </section>
       <section class="card"><div class="sec-h"><div><h2>Há quanto tempo estão atrasadas</h2><p>Atraso antigo costuma ser entrega sem baixa no G-Click ou tarefa que não se aplica mais.</p></div></div>
         ${legenda([["Com multa", GC_COR.multa], ["Sem multa", GC_COR.sem]])}
@@ -872,7 +890,7 @@ async function telaGclick() {
           deps.map((x) => `<tr data-fdep="${esc(x.k)}"><td class="forte">${esc(x.k)}</td><td class="n">${x.ab}</td><td class="n">${x.atr ? `<span class="pill atr">${x.atr}</span>` : "0"}${x.multa ? ` <span class="pill multa">${x.multa} multa</span>` : ""}</td><td class="n hm">${x.v7}</td>
             <td>${x.pct == null ? '<span style="color:var(--ink3)">—</span>' : `<div class="pct"><span class="tr"><i style="width:${x.pct}%;background:${x.pct >= 90 ? "var(--ok-ink)" : x.pct >= 70 ? "var(--c-risco)" : "var(--c-atr)"}"></i></span><b>${x.pct}%</b></div>`}</td></tr>`))}
       </section>
-      <section class="card"><div class="sec-h"><div><h2>Onde está o atraso</h2><p>Clientes e obrigações com mais tarefas atrasadas.</p></div>${segV("gonde", [["cli", "Clientes"], ["obr", "Obrigações"]], f.onde || "cli")}</div>
+      <section class="card"><div class="sec-h"><div><h2>Onde está o atraso</h2><p>Clientes e obrigações com mais tarefas atrasadas.${atrInt ? ` As <b>${atrInt}</b> internas da Utarget ficam fora.` : ""}</p></div>${segV("gonde", [["cli", "Clientes"], ["obr", "Obrigações"]], f.onde || "cli")}</div>
         ${(f.onde || "cli") === "cli"
           ? (clis.length ? vizBarras(clis.map((o) => ({ rot: o.k, attr: `data-fcli="${esc(o.k)}" style="cursor:pointer"`, partes: [{ v: o.multa, cor: GC_COR.multa, rot: "Com multa" }, { v: o.n - o.multa, cor: GC_COR.sem, rot: "Sem multa" }] }))) : '<div class="vazio-g">Nenhum cliente com atraso.</div>')
           : (obr.length ? vizBarras(obr.map((o) => ({ rot: o.k, valor: `${o.n}<small style="color:var(--ink3);font-weight:500"> · ${o.clis} cli.</small>`, partes: [{ v: o.multa, cor: GC_COR.multa, rot: "Com multa" }, { v: o.n - o.multa, cor: GC_COR.sem, rot: "Sem multa" }] }))) : '<div class="vazio-g">Nenhuma obrigação atrasada.</div>')}
