@@ -83,14 +83,15 @@ function vizCascata(passos, H = 250) {
   const Y = (v) => pt + (H - pt - pb) * (1 - (v - mn) / (mx - mn || 1));
   return `<svg class="viz" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cascata de resultado">
     <line class="ax" x1="${pl}" x2="${W - pr}" y1="${Y(0)}" y2="${Y(0)}"/>
-    ${barras.map((b, i) => { const x = pl + i * bw + bw * 0.16, w = bw * 0.68, ya = Y(Math.max(b.y0, b.y1)), yb = Y(Math.min(b.y0, b.y1)), h = Math.max(2, yb - ya);
+    ${(() => { let pvy = -99; return barras.map((b, i) => { const x = pl + i * bw + bw * 0.16, w = bw * 0.68, ya = Y(Math.max(b.y0, b.y1)), yb = Y(Math.min(b.y0, b.y1)), h = Math.max(2, yb - ya);
+      const vy = Math.abs(ya - 7 - pvy) < 12 ? yb + 14 : ya - 7; pvy = vy;
       const lig = i < n - 1 ? `<line x1="${x + w}" x2="${x + bw}" y1="${Y(b.y1)}" y2="${Y(b.y1)}" stroke="var(--ink3)" stroke-width="1" stroke-dasharray="2 3"/>` : "";
       return `<g ${tipAttr(`<div class="tt">${esc(b.rot)}</div>${tipLinha(b.cor, b.total ? "Valor" : b.v < 0 ? "Custo" : "Soma", brl(Math.abs(b.v)))}${b.sub ? `<div style="font-size:11.5px;color:var(--ink3);margin-top:4px">${esc(b.sub)}</div>` : ""}`)}>
         <rect x="${x}" y="${ya}" width="${w}" height="${h}" rx="4" fill="${b.cor}"/>${lig}
-        <text class="vl" x="${x + w / 2}" y="${ya - 7}" text-anchor="middle">${b.total ? kbrl(b.v) : kbrl(b.v)}</text>
+        <text class="vl" x="${x + w / 2}" y="${vy}" text-anchor="middle">${kbrl(b.v)}</text>
         <text x="${x + w / 2}" y="${H - pb + 16}" text-anchor="middle">${esc(b.rot)}</text>
         ${b.rot2 ? `<text x="${x + w / 2}" y="${H - pb + 30}" text-anchor="middle">${esc(b.rot2)}</text>` : ""}
-        <rect class="hit" x="${pl + i * bw}" y="${pt - 20}" width="${bw}" height="${H - pt - pb + 40}"/></g>`; }).join("")}
+        <rect class="hit" x="${pl + i * bw}" y="${pt - 20}" width="${bw}" height="${H - pt - pb + 40}"/></g>`; }).join(""); })()}
   </svg>`;
 }
 
