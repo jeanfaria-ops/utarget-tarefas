@@ -860,7 +860,7 @@ async function telaGclick() {
 
     $("#view").innerHTML = `
     <div class="saud"><div><h2>${atr.length ? `${atr.length} atrasadas` : "Em dia"}${atrM.length ? ` · <span style="color:var(--atr-ink)">${atrM.length} com multa</span>` : ""}</h2><p>${frase}${fraseDep}</p>
-      <div class="prog-s"><span class="tr"><i style="width:${pctSem ?? 0}%"></i></span><small><b>${n0(feitasSem.length)}</b> baixadas no G-Click desde segunda${feitasSem.filter((t) => t.multa).length ? ` (${feitasSem.filter((t) => t.multa).length} com multa)` : ""} · <b>${n0(focoAb.length)}</b> da semana ainda abertas</small></div></div>
+      <div class="prog-s"><span class="tr"><i style="width:${pctSem ?? 0}%"></i></span><small><b>${n0(feitasSem.length)}</b> baixadas no G-Click desde segunda${feitasSem.filter((t) => t.multa).length ? ` (${feitasSem.filter((t) => t.multa).length} com multa)` : ""} · <b>${n0(focoAb.length)}</b> vencidas até domingo seguem abertas</small></div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${segV("gcat", [["todas", "Tudo"], ["Obrigacao", "Obrigações"], ["Solicitacao", "Solicitações"]], f.cat)}</div></div>
     <div class="kpis">
       ${kpiG("ab", "Abertas", n0(ab.length), `${plural(new Set(ab.filter((t) => !t.interna).map((t) => t.cli)).size, "cliente", "clientes")}${ab.filter((t) => t.interna).length ? ` · ${ab.filter((t) => t.interna).length} internas da Utarget` : ""}`, "")}

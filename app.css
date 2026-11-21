@@ -596,7 +596,9 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .prog-s .tr i{display:block;height:100%;background:var(--ok-ink);border-radius:4px}
 .prog-s small{color:var(--ink3);font-size:12.5px}
 .prog-s small b{color:var(--ink)}
-.top-seg{flex:none}
+.top-seg{flex:none;background:var(--sup2);border:1px solid var(--linha)}
+.top-seg button{color:var(--ink2);padding:7px 14px}
+.top-seg button[aria-pressed="true"]{background:var(--azul);color:#fff}
 @media (max-width:960px){.top-seg{display:none}}
 .chip{min-height:36px}
 .st-b{padding:7px 6px}
