@@ -27,6 +27,8 @@ const SEMAF = {
 const clsSem = (s) => (SEMAF.atr.includes(s) ? "atr" : SEMAF.risco.includes(s) ? "risco" : SEMAF.ok.includes(s) ? "ok" : "neu");
 const pillSem = (s, txt) => (s ? `<span class="pill ${clsSem(s)}">${esc(txt || rotulo(s))}</span>` : '<span class="pill neu">—</span>');
 const temMod = (c) => (st.mods || []).some((m) => m.codigo === c);
+// Linha que fecha cada tela com a ação do momento (posição serial e pico-final)
+const linhaAgora = (html) => (html ? `<div class="agora"><span class="ag-r">Agora</span><span>${html}</span></div>` : "");
 const nivelMod = (c) => (st.mods || []).find((m) => m.codigo === c)?.nivel;
 const qMod = () => (st.f.q || "").trim().toLowerCase();
 const casa = (o, campos) => !qMod() || campos.some((k) => String(o[k] ?? "").toLowerCase().includes(qMod()));
@@ -162,20 +164,21 @@ async function telaInicio() {
       <section class="card ini-f"><div class="sec-h"><div><h2>Precisa de você</h2><p>Do mais grave ao menos grave. Clique para ir direto ao item.</p></div></div>
         <div id="feed"><div class="sk" style="height:260px"></div></div></section>
       <aside class="ini-p"><div class="ini-pt">Pulso</div><div id="pulso">
-        ${temMod("tarefas") ? `<button class="pl" data-ir="gclick" id="pl-gclick"><span class="pn"><i class="sk" style="display:block;width:34px;height:24px"></i></span><span class="pr"><b>Minhas tarefas atrasadas</b><small>carregando do G-Click…</small></span></button>` : ""}
+        ${temMod("tarefas") ? `<button class="pl" data-ir="gclick" id="pl-gclick"><span class="pn"><i class="sk" style="display:block;width:34px;height:24px"></i></span><span class="pr"><b>Atrasadas só minhas</b><small>carregando do G-Click…</small></span></button>` : ""}
         ${outros.map((x) => `<button class="pl" data-ir="${x.codigo}" id="pl-${x.codigo}"><span class="pn"><i class="sk" style="display:block;width:34px;height:24px"></i></span><span class="pr"><b>${esc(x.nome)}</b><small>carregando…</small></span></button>`).join("")}
       </div></aside>
     </div>`;
   ligaIr();
   let itens = [];
   const gSem = { feitas: null, multa: null }; // progresso da semana no G-Click (efeito Zeigarnik)
-  const pulso = (cod, n, sub, cls) => { const b = $(`#pl-${cod}`); if (b) { $(".pn", b).className = "pn " + (cls ? "t-" + cls : ""); $(".pn", b).textContent = n; $("small", b).textContent = sub; } };
+  const pulso = (cod, n, sub, cls) => { const b = $(`#pl-${cod}`); if (b) { $(".pn", b).className = "pn " + (cls ? "t-" + cls : ""); $(".pn", b).textContent = n; $("small", b).textContent = sub; b.classList.toggle("pl-zero", !cls && (n === 0 || n === "—")); } };
   const fontes = {
     gclick: async () => { const d = await rpcMod("app_mod_gclick"); const ab = d.tarefas.filter((t) => t.ab && t.minha);
       const atr = ab.filter((t) => t.venc && t.venc < hoje), v7 = ab.filter((t) => t.venc && t.venc >= hoje && diff(t.venc, hoje) <= 7);
       const vai = (chip) => () => { st.escopo = "minhas"; ls.set("escopo", "minhas"); st.fg = { ...(st.fg || { dep: "", resp: "", cli: "", cat: "todas", lim: 40 }), chip, dep: "", resp: "", cli: "" }; casca(); irPara("gclick"); };
       const multa = [...atr, ...v7].filter((t) => t.multa);
-      pulso("gclick", atr.length, `${ab.length} abertas no G-Click · ${v7.length} vencem em 7 dias`, multa.length ? "atr" : atr.length ? "risco" : "");
+      const soMinhas = atr.filter((t) => (t.resp_ativos || []).length <= 1); // Lei de Tesler: separa o que divide com a equipe
+      pulso("gclick", soMinhas.length, `${atr.length - soMinhas.length} atrasadas divididas com a equipe · ${ab.length} abertas no G-Click`, multa.length ? "atr" : soMinhas.length ? "risco" : "");
       const baseE = st.escopo === "minhas" ? d.tarefas.filter((t) => t.minha) : d.tarefas;
       const dow = new Date(hoje + "T12:00:00Z").getUTCDay(), segunda = addD(hoje, -((dow + 6) % 7));
       gSem.feitas = baseE.filter((t) => !t.ab && t.conc && t.conc >= segunda && ["Concluída", "Finalizada", "Retificada"].includes(t.st)).length;
@@ -227,10 +230,10 @@ async function telaInicio() {
     + (itens.length ? `<b>${plural(itens.length, "ponto pede", "pontos pedem")}</b> sua atenção${graves ? `, <b>${graves}</b> ${graves === 1 ? "grave" : "graves"}` : ""}.` : "Nada pedindo atenção agora.")
     + (gSem.feitas != null ? ` <span style="color:var(--ink3)">${n0(gSem.feitas)} baixadas no G-Click desde segunda.</span>` : "");
   const go = $("#ini-go"); if (go && itens.length) { go.hidden = false; go.onclick = () => itens[0].acao(); }
-  let lim = 12;
+  let lim = 3; // Lei de Hick: os 3 mais graves; o resto sob demanda
   const pinta = () => {
     $("#feed").innerHTML = itens.length ? `<div class="fd">${itens.slice(0, lim).map((it, k) => `<button class="fi s${it.sev}" data-k="${k}"><span class="fb"></span><span class="ft"><b>${esc(it.tit)}</b><small>${esc(it.ctx || "")}</small></span><span class="fm">${esc(it.mod)}</span>${I.seta}</button>`).join("")}</div>
-      ${itens.length > lim ? `<button class="mais" id="fd-mais">Mostrar mais ${itens.length - lim}</button>` : ""}` : `<div class="vazio">${I.festa}<h3>Tudo em ordem</h3><div>Nenhum ponto de atenção nas suas áreas.</div></div>`;
+      ${itens.length > lim ? `<button class="mais" id="fd-mais">Ver os outros ${itens.length - lim}</button>` : ""}` : `<div class="vazio">${I.festa}<h3>Tudo em ordem</h3><div>Nenhum ponto de atenção nas suas áreas.</div></div>`;
     $$(".fi").forEach((b) => (b.onclick = () => itens[+b.dataset.k].acao()));
     if ($("#fd-mais")) $("#fd-mais").onclick = () => { lim = itens.length; pinta(); };
   };
@@ -263,7 +266,9 @@ async function telaCarteira() {
           <td class="hm">${x.mandato ? pillSem(x.mandato) : '<span style="color:var(--ink3)">—</span>'}</td><td class="n hm">${x.tickets_30d || '<span style="color:var(--ink3)">0</span>'}</td>
           ${verFin ? `<td class="n hm">${brl(x.honorario)}</td><td class="hm">${x.margem_status ? pillSem(x.margem_status) : '<span style="color:var(--ink3)">—</span>'}</td>` : ""}</tr>`),
         "Nenhum cliente com esse filtro.")}</div>
-      <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">${plural(l.length, "cliente", "clientes")}, os que pedem mais atenção primeiro. Clique para abrir a ficha.</div>`;
+      <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">${plural(l.length, "cliente", "clientes")}, os que pedem mais atenção primeiro. Clique para abrir a ficha.</div>
+      ${linhaAgora((() => { const cb = seg.filter((x) => x.bloqueios > 0), cm = seg.filter((x) => ["vencido", "em_disputa"].includes(x.mandato));
+        return cb.length || cm.length ? `Destravar <b>${cb.length}</b> ${cb.length === 1 ? "cliente com bloqueio" : "clientes com bloqueio"} e regularizar <b>${cm.length}</b> ${cm.length === 1 ? "mandato vencido ou em disputa" : "mandatos vencidos ou em disputa"} — começar por <b>${esc((cb[0] || cm[0]).sigla)}</b>.` : "Nenhum bloqueio aberto neste grupo de clientes."; })())}`;
     $$("[data-fc]").forEach((b) => (b.onclick = () => { f.chip = b.dataset.fc; pinta(); }));
     $$("[data-seg=cseg]").forEach((b) => (b.onclick = () => { f.seg = b.dataset.k; f.chip = "todas"; pinta(); }));
     ligaIr($("#view"));
@@ -339,7 +344,8 @@ async function telaLegalizacao() {
     <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Calendário de vencimentos</h2><p>Certificações e mandatos de diretoria por mês de vencimento, nos próximos 12 meses.</p></div></div>
       ${legenda([["Certificação", "var(--s1)"], ["Mandato", "var(--s2)"]])}${vizColunas(calLeg(d), ["Certificação", "Mandato"], { "Certificação": "var(--s1)", "Mandato": "var(--s2)" }, { destaque: "Vencidos" })}</section>
     <div class="card"><div class="sec-h"><div><h2>${{ cert: "Certificações", mand: "Mandatos de diretoria", cdao: "Certidões por entidade", bloq: "Bloqueios e divergências", fila: "Fila de emissão de certidões" }[aba]}</h2><p>Ordenado pelo que vence primeiro. Clique na linha para abrir a ficha.</p></div>
-      ${segV("leg", [["cert", "Certificações"], ["mand", "Mandatos"], ["cdao", "Certidões"], ["bloq", "Bloqueios"], ["fila", `Fila (${d.fila.length})`]], aba)}</div>${corpo[aba]()}</div>`;
+      ${segV("leg", [["cert", "Certificações"], ["mand", "Mandatos"], ["cdao", "Certidões"], ["bloq", "Bloqueios"], ["fila", `Fila (${d.fila.length})`]], aba)}</div>${corpo[aba]()}</div>
+    ${linhaAgora(cv.length || mv.length ? `Renovar as <b>${cv.length}</b> certificações vencidas ou críticas e regularizar os <b>${mv.length}</b> mandatos em alerta — cada caso está na aba correspondente.` : "Certificações e mandatos em dia.")}`;
   $$("[data-seg=leg]").forEach((b) => (b.onclick = () => { st.abaLeg = b.dataset.k; telaLegalizacao(); }));
   ligaIr($("#view"));
   ligaTips($("#view"));
@@ -378,7 +384,8 @@ async function telaCaptacao() {
     </div>
     <div class="cap-l">${com.map(card).join("") || '<div class="vazio"><h3>Nenhum edital com OSC aderente</h3><div>O radar não achou encaixe na carteira agora.</div></div>'}</div>
     ${sem.length ? `<details class="cap-sem"><summary>${plural(sem.length, "edital aberto sem OSC aderente", "editais abertos sem OSC aderente")}</summary><div class="cap-l">${sem.map(card).join("")}</div></details>` : ""}
-    <div style="color:var(--ink3);font-size:12.5px;margin:12px 4px">O encaixe é leitura do radar. A elegibilidade só se confirma no edital ou TR oficial aberto.</div>`;
+    <div style="color:var(--ink3);font-size:12.5px;margin:12px 4px">O encaixe é leitura do radar. A elegibilidade só se confirma no edital ou TR oficial aberto.</div>
+    ${linhaAgora(q15.length ? `Decidir com os dirigentes em quais dos <b>${q15.length}</b> editais que fecham em 15 dias as OSCs entram — elegibilidade se confirma no edital oficial.` : "Nenhum edital aderente fechando em 15 dias.")}`;
   ligaIr($("#view"));
 }
 // ---------------------------------------------------------------- COMERCIAL
@@ -407,7 +414,9 @@ async function telaComercial() {
         ${vizBarras([...porEtapa.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ rot: rotulo(k), v, cor: k === "perdido" ? "var(--s-neu)" : k === "contrato" || k === "contratado" ? "var(--ok-ink)" : "var(--s1)",
           valor: `${v} · ${kbrl(d.deals.filter((x) => (x.etapa || "—") === k).reduce((a, x) => a + (+x.valor_anual || 0), 0))}` })))}</section>
     </div>
-    <div style="color:var(--ink3);font-size:12.5px;margin:4px">Lead e contato vivem no Brevo; aqui só o espelho para acompanhar. Atividades de pré-venda viram tarefa do departamento Comercial.</div>`;
+    <div style="color:var(--ink3);font-size:12.5px;margin:4px">Lead e contato vivem no Brevo; aqui só o espelho para acompanhar. Atividades de pré-venda viram tarefa do departamento Comercial.</div>
+    ${linhaAgora((() => { const p14 = abertos.filter((x) => x.ultimo_evento && diff(hojeISO(), x.ultimo_evento) > 14).sort((a, b) => (a.ultimo_evento || "").localeCompare(b.ultimo_evento || ""));
+      return p14.length ? `Retomar <b>${p14.length}</b> ${p14.length === 1 ? "proposta parada" : "propostas paradas"} há mais de 14 dias — a mais antiga é <b>${esc(p14[0].deal)}</b>, sem movimento desde ${dm(p14[0].ultimo_evento)}.` : "Nenhuma proposta parada há mais de 14 dias."; })())}`;
   ligaIr($("#view"));
   ligaTips($("#view"));
 }
@@ -424,15 +433,19 @@ async function telaAtendimento() {
   cabecalho("Atendimento", "WhatsApp da Utarget (ZapContábil)");
   carregandoView();
   let d; try { d = await rpcMod("app_mod_atendimento"); } catch (e) { return erroView(e); }
+  cabecalho("Atendimento", `WhatsApp da Utarget (ZapContábil) · espelho de ${quando(d.coletado_em)}`);
   const ab = d.setores.reduce((a, s) => a + s.abertos, 0), par = d.setores.reduce((a, s) => a + s.parados_24h, 0), t30 = d.setores.reduce((a, s) => a + s.tickets_30d, 0);
   const agora = Date.now(), horas = (ts) => (ts ? Math.round((agora - new Date(ts)) / 36e5) : null);
+  const maisParado = d.abertos.filter((x) => x.ultima_msg_em).sort((a, b) => new Date(a.ultima_msg_em) - new Date(b.ultima_msg_em))[0];
+  const hMax = maisParado ? horas(maisParado.ultima_msg_em) : null;
+  const piorS = d.setores.filter((s) => s.parados_24h > 0).sort((a, b) => b.parados_24h - a.parados_24h)[0];
   const l = d.abertos.filter((x) => casa(x, ["setor", "atendente", "sigla"]));
   $("#view").innerHTML = `
     <div class="kpis k4">
       ${kpiM("Abertos agora", ab, "abertos ou pendentes")}
       ${kpiM("Parados há mais de 24h", par, "última mensagem há mais de um dia", par ? "atr" : "ok")}
       ${kpiM("Atendimentos em 30 dias", t30, "todos os setores")}
-      ${kpiM("Espelho atualizado", quando(d.coletado_em), "fonte: ZapContábil")}
+      ${kpiM("Parado há mais tempo", hMax == null ? "—" : hMax >= 48 ? Math.round(hMax / 24) + "<small>d</small>" : hMax + "<small>h</small>", maisParado ? `#${esc(String(maisParado.ticket_id))} · ${esc(nomeSetor(maisParado.setor))}` : "fila vazia", hMax > 72 ? "atr" : "")}
     </div>
     <div class="bi-r c2b">
       <section class="card"><div class="sec-h"><div><h2>Fila por setor</h2><p>Abertos agora; em vermelho, os parados há mais de 24h.</p></div></div>
@@ -450,7 +463,8 @@ async function telaAtendimento() {
         <section class="card"><div class="sec-h"><div><h2>Clientes que mais chamaram</h2><p>Últimos 30 dias.</p></div></div>${tabela([["Cliente"], ["Atend.", "n"], ["Msgs do cliente", "n"]],
           d.clientes.map((c) => `<tr data-ent="${c.entidade_id}"><td class="forte">${esc(c.sigla)}</td><td class="n">${c.tickets}</td><td class="n">${c.msgs_cliente ?? "—"}</td></tr>`))}</section>
       </div>
-    </div>`;
+    </div>
+    ${linhaAgora(par ? `Zerar as <b>${par}</b> conversas paradas há mais de 24h — começar por <b>${esc(nomeSetor(piorS.setor))}</b> (${piorS.parados_24h}). Responder e transferir é no ZapContábil.` : "Nenhuma conversa parada há mais de 24h.")}`;
   ligaIr($("#view"));
   ligaTips($("#view"));
 }
@@ -488,7 +502,8 @@ async function telaFinanceiro() {
           d.inadimplencia.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">${esc(x.cliente)}</td><td class="n">${x.parcelas}</td><td class="n">${brl(x.em_aberto)}</td><td class="n"><span class="pill ${x.dias > 30 ? "atr" : "risco"}">${x.dias}</span></td></tr>`), semInad ? "Ainda não medida: a planilha de fluxo de caixa registra as entradas por banco, não por cliente. Entra com a carga do Conta Azul (contas a receber por cliente)." : "Nenhuma parcela vencida em aberto.")}</section>
       </div>
     </div>
-    <div style="color:var(--ink3);font-size:12.5px;margin:4px">Última importação: ${quando(i.ultima_importacao)}.</div>`;
+    <div style="color:var(--ink3);font-size:12.5px;margin:4px">Última importação: ${quando(i.ultima_importacao)}.</div>
+    ${linhaAgora([i.folego_meses != null && i.folego_meses < 1 ? `O caixa cobre <b>${n1(i.folego_meses)}</b> mês de despesa: confirmar os recebimentos do mês antes de qualquer compra.` : "", pct2 >= 50 ? `<b>${esc(top2.map((c) => c.cliente).join(" e "))}</b> somam ${n1(pct2)}% do recorrente: fechar novos contratos dilui o risco.` : "", semInad ? "A inadimplência passa a ser medida quando o contas a receber do Conta Azul entrar na fase 1." : ""].filter(Boolean).join(" ") || "Caixa e recebimentos em ordem.")}`;
   $$(".bc").forEach((b) => { const [m, f, r, p] = b.dataset.tipm.split("|"); b.onmousemove = (e) => dica(e, `<div class="tt">${m}</div>${tipLinha("var(--c-ok)", "Faturado", f)}${tipLinha("var(--ok-ink)", "Recebido", r)}${tipLinha("var(--c-risco)", "Pago", p)}`); b.onmouseleave = () => dica(); });
   ligaIr($("#view"));
 }
@@ -577,7 +592,8 @@ async function telaMargem() {
             <td class="n">${brl(x.honorario)}</td><td class="n hm">${x.horas == null ? "—" : n1(x.horas)}</td><td class="n">${x.custo == null ? "—" : brl(x.custo)}</td>
             <td class="n">${x.custo == null ? "—" : `<span class="${x.resultado < 0 ? "t-atr" : ""}">${brl(x.resultado)}</span>`}</td><td class="n">${mg(x.margem_pct)}</td>
             <td><div class="mg-acts"><button class="st-b" data-mge="${x.entidade_id}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button>${x.custo == null ? "" : botaoRel("e", x.entidade_id)}</div></td></tr>`))}</div>
-    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo inclui pró-labore da Cris e remuneração do Jean (decisão de 19/11/2026), encargos reais (FGTS e INSS), benefícios, provisão de 13º e férias, estrutura (sistemas, ocupação, CRC, mentoria em 12 meses). Aquisição de clientes e despesas pessoais dos sócios ficam fora. Horas em clientes sem contrato ativo não entram em nenhum grupo.</div>`;
+    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo inclui pró-labore da Cris e remuneração do Jean (decisão de 19/11/2026), encargos reais (FGTS e INSS), benefícios, provisão de 13º e férias, estrutura (sistemas, ocupação, CRC, mentoria em 12 meses). Aquisição de clientes e despesas pessoais dos sócios ficam fora. Horas em clientes sem contrato ativo não entram em nenhum grupo.</div>
+    ${linhaAgora(neg.length ? `Renegociar os <b>${neg.length}</b> grupos no prejuízo — começar por <b>${esc([...neg].sort((a, b) => a.resultado - b.resultado)[0].grupo)}</b>, com o relatório de custo pronto no botão ao lado da situação.` : "Nenhum grupo no prejuízo nesta competência.")}`;
   $$("tr.gr").forEach((t) => (t.onclick = () => { const g = t.dataset.g; abertos.has(g) ? abertos.delete(g) : abertos.add(g); telaMargem(); }));
   $$("[data-seg=mg]").forEach((b) => (b.onclick = () => { st.margemModo = b.dataset.k; telaMargem(); }));
   ligaIr($("#view"));
@@ -801,6 +817,7 @@ async function telaGclick() {
   carregandoView();
   let d; try { d = await rpcMod("app_mod_gclick"); } catch (e) { return erroView(e); }
   const f = st.fg || (st.fg = { chip: "atr", dep: "", resp: "", cli: "", cat: "todas", lim: 40 });
+  if (!f.vista) f.vista = "agora"; // Lei de Miller: decisão e análise em abas separadas
   const nomeP = (n) => (n === n.toUpperCase() ? n.toLowerCase().replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()) : n);
   const todas = d.tarefas.map((t) => ({ ...t, dep: DEP_CURTO(t.dep), sit: gcSituacao(t, hoje), resp: [...new Set((t.resp || []).map(nomeP))],
     respA: [...new Set((t.resp_ativos || []).map(nomeP))], interna: /utarget/i.test(t.cli || "") })); // respA = equipe atual; interna = tarefa da própria Utarget
@@ -861,7 +878,7 @@ async function telaGclick() {
     $("#view").innerHTML = `
     <div class="saud"><div><h2>${atr.length ? `${atr.length} atrasadas` : "Em dia"}${atrM.length ? ` · <span style="color:var(--atr-ink)">${atrM.length} com multa</span>` : ""}</h2><p>${frase}${fraseDep}</p>
       <div class="prog-s"><span class="tr"><i style="width:${pctSem ?? 0}%"></i></span><small><b>${n0(feitasSem.length)}</b> baixadas no G-Click desde segunda${feitasSem.filter((t) => t.multa).length ? ` (${feitasSem.filter((t) => t.multa).length} com multa)` : ""} · <b>${n0(focoAb.length)}</b> vencidas até domingo seguem abertas</small></div></div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${segV("gcat", [["todas", "Tudo"], ["Obrigacao", "Obrigações"], ["Solicitacao", "Solicitações"]], f.cat)}</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${segV("gvista", [["agora", "Agora"], ["analise", "Análise"]], f.vista)}${segV("gcat", [["todas", "Tudo"], ["Obrigacao", "Obrigações"], ["Solicitacao", "Solicitações"]], f.cat)}</div></div>
     <div class="kpis">
       ${kpiG("ab", "Abertas", n0(ab.length), `${plural(new Set(ab.filter((t) => !t.interna).map((t) => t.cli)).size, "cliente", "clientes")}${ab.filter((t) => t.interna).length ? ` · ${ab.filter((t) => t.interna).length} internas da Utarget` : ""}`, "")}
       ${kpiG("atr", "Atrasadas", n0(atr.length), atrM.length ? `<b style="color:var(--atr-ink)">${atrM.length}</b> com multa` : "nenhuma com multa", "risco")}
@@ -869,6 +886,7 @@ async function telaGclick() {
       ${kpiG("ent", "Entregues no prazo", pct == null ? "—" : pct + "<small>%</small>", ent.length ? `<b>${n0(noPrazo.length)}</b> de ${n0(ent.length)} em 90 dias` : "sem entregas em 90 dias", "ok")}
       ${kpiG("semresp", "Sem responsável", n0(semResp), `nomes lidos em ${cober}% das abertas`, "")}
     </div>
+    <div ${f.vista === "analise" ? "" : "hidden"}>
     <div class="grade">
       <section class="card"><div class="sec-h"><div><h2>Carga por pessoa</h2><p>Tarefas abertas por responsável no G-Click, só da equipe atual (contas de sistema e desligados ficam de fora). Clique para filtrar.</p></div></div>
         ${legenda([["Com multa", GC_COR.multa], ["Atrasada", GC_COR.atr], ["Vence em 7 dias", GC_COR.v7], ["Em dia", GC_COR.ok]])}
@@ -896,8 +914,10 @@ async function telaGclick() {
           : (obr.length ? vizBarras(obr.map((o) => ({ rot: o.k, valor: `${o.n}<small style="color:var(--ink3);font-weight:500"> · ${o.clis} cli.</small>`, partes: [{ v: o.multa, cor: GC_COR.multa, rot: "Com multa" }, { v: o.n - o.multa, cor: GC_COR.sem, rot: "Sem multa" }] }))) : '<div class="vazio-g">Nenhuma obrigação atrasada.</div>')}
       </section>
     </div>
+    </div>
+    <div ${f.vista === "analise" ? "hidden" : ""}>
     <section class="card" id="gc-lista" style="padding:14px 8px 4px">
-      <div class="filtros" style="padding:0 8px 10px">${chip("atr", "Atrasadas", GC_COR.atr)}${chip("multa", "Multa à vista", GC_COR.multa)}${chip("v7", "Vencem em 7 dias", GC_COR.v7)}${chip("ab", "Todas abertas")}${chip("ent", "Entregues (90d)", "var(--ok-ink)")}${chip("tarde", "Entregues com atraso")}
+      <div class="filtros stick" style="padding:8px 8px 10px">${chip("atr", "Atrasadas", GC_COR.atr)}${chip("multa", "Multa à vista", GC_COR.multa)}${chip("v7", "Vencem em 7 dias", GC_COR.v7)}${f.maisF || ["ab", "ent", "tarde"].includes(f.chip) ? `${chip("ab", "Todas abertas")}${chip("ent", "Entregues (90d)", "var(--ok-ink)")}${chip("tarde", "Entregues com atraso")}` : ""}<button class="chip" id="gc-maisf">${f.maisF ? "Menos filtros" : "Mais filtros"}</button>
         ${ativo.map(([k, r]) => `<button class="chip" data-limpa="${k}" aria-pressed="true">${esc(r)} ✕</button>`).join("")}</div>
       ${tabela([["Tarefa"], ["Cliente"], [f.chip === "ent" || f.chip === "tarde" ? "Entregue" : "Vencimento", "n"], ["Responsável", "hm"], ["Situação"]],
         lst.slice(0, f.lim).map((t) => `<tr ${t.ent ? `data-ent="${t.ent}"` : 'style="cursor:default"'}><td><div class="forte" style="font-size:13px">${esc(t.nome)}</div><small style="color:var(--ink3)">${esc(t.dep)}${t.comp ? " · comp. " + comp(t.comp) : ""}${t.cat === "Solicitacao" ? " · solicitação" : ""}</small></td>
@@ -908,17 +928,21 @@ async function telaGclick() {
         "Nada com esse filtro.")}
       ${lst.length > f.lim ? `<button class="mais" id="gc-mais">Mostrar mais ${Math.min(100, lst.length - f.lim)} de ${lst.length - f.lim}</button>` : ""}
     </section>
-    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Leitura do G-Click; a baixa e a execução continuam lá. Responsáveis são lidos aos poucos a cada coleta (${cober}% das abertas até agora).</div>`;
+    ${linhaAgora(atrM.length + v7M.length ? `Baixar primeiro as <b>${atrM.length + v7M.length}</b> com multa à vista${velhas.length ? `; depois conferir as <b>${velhas.length}</b> vencidas há mais de 60 dias, que podem já ter sido entregues sem baixa` : ""}.` : atr.length ? `Confirmar as <b>${atr.length}</b> atrasadas e dar baixa no G-Click no que já foi entregue.` : "Tudo em dia: manter as entregas da semana.")}
+    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Leitura do G-Click; a baixa e a execução continuam lá. Responsáveis são lidos aos poucos a cada coleta (${cober}% das abertas até agora).</div>
+    </div>`;
 
-    const vaiLista = () => $("#gc-lista").scrollIntoView({ behavior: "smooth", block: "start" });
+    const vaiLista = () => $("#gc-lista")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    $$("[data-seg=gvista]").forEach((b) => (b.onclick = () => { f.vista = b.dataset.k; pinta(); }));
+    if ($("#gc-maisf")) $("#gc-maisf").onclick = () => { f.maisF = !f.maisF; pinta(); };
     $$("[data-gc]").forEach((b) => (b.onclick = () => { f.chip = b.dataset.gc; f.lim = 40; pinta(); }));
     $$("[data-limpa]").forEach((b) => (b.onclick = () => { f[b.dataset.limpa] = ""; pinta(); }));
     $$("[data-seg=gcat]").forEach((b) => (b.onclick = () => { f.cat = b.dataset.k; pinta(); }));
     $$("[data-seg=gonde]").forEach((b) => (b.onclick = () => { f.onde = b.dataset.k; pinta(); }));
-    $$("[data-fresp]").forEach((b) => (b.onclick = () => { f.resp = b.dataset.fresp; f.chip = "ab"; pinta(); vaiLista(); }));
-    $$("[data-fdep]").forEach((b) => (b.onclick = () => { f.dep = b.dataset.fdep; f.chip = "atr"; pinta(); vaiLista(); }));
-    $$("[data-fcli]").forEach((b) => (b.onclick = () => { f.cli = b.dataset.fcli; f.chip = "atr"; pinta(); vaiLista(); }));
-    $$("[data-gk]").forEach((b) => (b.onclick = () => { const k = b.dataset.gk; if (k === "semresp") { f.resp = "Sem responsável"; f.chip = "ab"; } else f.chip = k; pinta(); vaiLista(); }));
+    $$("[data-fresp]").forEach((b) => (b.onclick = () => { f.resp = b.dataset.fresp; f.chip = "ab"; f.vista = "agora"; pinta(); vaiLista(); }));
+    $$("[data-fdep]").forEach((b) => (b.onclick = () => { f.dep = b.dataset.fdep; f.chip = "atr"; f.vista = "agora"; pinta(); vaiLista(); }));
+    $$("[data-fcli]").forEach((b) => (b.onclick = () => { f.cli = b.dataset.fcli; f.chip = "atr"; f.vista = "agora"; pinta(); vaiLista(); }));
+    $$("[data-gk]").forEach((b) => (b.onclick = () => { const k = b.dataset.gk; if (k === "semresp") { f.resp = "Sem responsável"; f.chip = "ab"; } else f.chip = k; f.vista = "agora"; pinta(); vaiLista(); }));
     if ($("#gc-mais")) $("#gc-mais").onclick = () => { f.lim += 100; pinta(); };
     ligaIr($("#view")); ligaTips($("#view"));
   };
