@@ -663,7 +663,7 @@ function relatorioCliente(d, { margem = true, janela = null } = {}) { // margem 
   const CORES = { "Contábil": "#2a78d6", "DP": "#eb6834", "BPO": "#1baf7a", "Legalização": "#eda100", "Fiscal": "#e87ba4" };
   const NOME = { "Contábil": "Contabilidade", "DP": "Departamento Pessoal", "BPO": "BPO Financeiro", "Legalização": "Legalização e certificações", "Fiscal": "Fiscal" };
   const totH = r.horas || 0, totC = r.custo || 0;
-  // Valor do serviço entregue = custo da área ÷ ((1 − Simples) × (1 − margem mínima)): preço que o trabalho deveria ter
+  // Valor do serviço entregue = custo da área ÷ (1 − Simples − margem mínima): preço que o trabalho deveria ter
   const das = (r.das_pct ?? 11) / 100, alvo = (r.margem_alvo_pct ?? 40) / 100, fator = 1 - das - alvo; // tributos no custo (21/11/2026)
   const preco = (custo) => (+custo || 0) / fator;
   const totV = (d.departamentos || []).reduce((s, k) => s + preco(k.custo), 0) || preco(totC);
@@ -676,7 +676,6 @@ function relatorioCliente(d, { margem = true, janela = null } = {}) { // margem 
   const lista = [...emp.values()].sort((a, b) => b.horas - a.horas);
   const maxH = Math.max(1, ...lista.map((e) => e.horas));
   const top = lista[0], dep0 = (d.departamentos || [])[0];
-  const cobre = totC ? Math.round((100 * r.honorario) / (totC / (1 - (r.das_pct || 11) / 100))) : null;
   const barra = (deps, total, larg) => `<div class="bar" style="width:${larg}%">${DEPS.filter((k) => deps[k] > 0).map((k) => `<i style="flex:${deps[k]};background:${CORES[k]}" title="${NOME[k]}: ${H1(deps[k])}h"></i>`).join("")}</div>`;
   const leitura = [
     top && totH ? `<b>${Math.round((100 * top.horas) / totH)}%</b> do trabalho do mês foi para <b>${esc(top.sigla || top.nome)}</b>.` : "",
