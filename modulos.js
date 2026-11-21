@@ -101,7 +101,7 @@ function vizDispersao(pts, { das = 11, alvo = 40, H = 330 } = {}) {
   const lo = Math.pow(10, Math.floor(Math.log10(Math.max(50, Math.min(...xs, ...ys) * 0.8)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...xs, ...ys) * 1.15)));
   const L = (v) => Math.log10(Math.max(v, lo)), X = (v) => pl + (W - pl - pr) * (L(v) - L(lo)) / (L(hi) - L(lo)), Y = (v) => pt + (H - pt - pb) * (1 - (L(v) - L(lo)) / (L(hi) - L(lo)));
   const ticks = []; for (let t = lo; t <= hi; t *= 10) ticks.push(t);
-  const k1 = 1 - das / 100, k2 = k1 * (1 - alvo / 100);
+  const k1 = 1 - das / 100, k2 = 1 - das / 100 - alvo / 100; // tributos no custo: alvo medido sobre o honorário cheio
   const linha = (k, cor, rot) => { const x1 = lo, x2 = hi; const y1 = x1 * k, y2 = x2 * k; return `<line class="ref" x1="${X(x1)}" y1="${Y(y1)}" x2="${X(x2)}" y2="${Y(y2)}" stroke="${cor}"/><text x="${X(x2) - 4}" y="${Y(y2) + 14}" text-anchor="end" style="fill:${cor};font-weight:700">${rot}</text>`; };
   const rmax = Math.max(...pts.map((p) => p.r || 1));
   const ord = [...pts].sort((a, b) => (b.r || 0) - (a.r || 0));
@@ -529,6 +529,7 @@ async function telaMargem() {
   const dep0 = d.departamentos[0] || {};
   const custoTot = d.departamentos.reduce((a, k) => a + +k.custo_direto, 0) + +(dep0.custo_comum_total || 0);
   const recTot = d.grupos.reduce((a, x) => a + +(x.receita_liquida || 0), 0);
+  const honTot = d.grupos.reduce((a, x) => a + +(x.honorario || 0), 0), tribTot = honTot - recTot;
   const semDono = custoTot - comHoras.reduce((a, x) => a + +x.custo_total, 0);
   const mg = (v) => (v == null ? "—" : `<span class="${v < 0 ? "t-atr" : v < 40 ? "t-risco" : "t-ok"}">${n1(v)}%</span>`);
   const linha = (x) => {
@@ -546,7 +547,8 @@ async function telaMargem() {
   };
   const resOp = recTot - custoTot;
   const depOrd = DEPS.map((k) => d.departamentos.find((x) => x.departamento === k)).filter(Boolean);
-  const cascata = [{ rot: "Receita", rot2: "líquida", v: recTot, total: true, cor: "var(--c-ok)", sub: "Honorários menos DAS" }]
+  const cascata = [{ rot: "Honorários", rot2: "do mês", v: honTot, total: true, cor: "var(--c-ok)", sub: "Contratos ativos + projetos ÷ 12" },
+      { rot: "Tributos", rot2: "Simples", v: -tribTot, cor: "var(--s-neu)", sub: "DAS sobre a nota: custo, não desconto" }]
     .concat(depOrd.map((k) => ({ rot: k.departamento, rot2: `${n0(k.horas_apontadas)}h`, v: -k.custo_direto, cor: DEPC[k.departamento], sub: `Custo direto de quem produz · R$ ${n1(k.custo_direto_hora)}/h` })))
     .concat(cItens.length ? COMUM_G.map(([g, rot, sub]) => ({ rot, rot2: g === "Horas internas da equipe" ? "internas" : "", v: -somaG(g), cor: "var(--s-neu)", sub }))
       : [{ rot: "Comum", rot2: "estrutura", v: -dep0.custo_comum_total, cor: "var(--s-neu)", sub: "Sistemas, ocupação, gestão, financeiro, encargos e mentoria" }])
@@ -562,7 +564,7 @@ async function telaMargem() {
     <section class="card" style="margin-bottom:16px"><div class="hero">
       <div class="hero-n"><span class="rot">Resultado da operação · ${comp(r.competencia_horas)}</span>
         <span class="num ${resOp < 0 ? "t-atr" : ""}">${kbrl(resOp)}</span>
-        <span class="sub">Margem de <b>${n1((100 * resOp) / (recTot || 1))}%</b> sobre a receita líquida de <b>${brl(recTot)}</b>.<br>
+        <span class="sub">Margem de <b>${n1((100 * resOp) / (honTot || 1))}%</b> sobre <b>${brl(honTot)}</b> de honorários, já com <b>${brl(tribTot)}</b> de tributos no custo.<br>
           <b>${neg.length}</b> ${neg.length === 1 ? "grupo dá" : "grupos dão"} prejuízo${neg.length ? ` (${neg.slice(0, 3).map((x) => esc(x.grupo)).join(", ")})` : ""}.<br>
           <b>${brl(semDono)}</b> do custo está em horas de clientes sem contrato ativo no banco.</span></div>
       <div>${vizCascata(cascata)}</div></div></section>
@@ -592,7 +594,7 @@ async function telaMargem() {
             <td class="n">${brl(x.honorario)}</td><td class="n hm">${x.horas == null ? "—" : n1(x.horas)}</td><td class="n">${x.custo == null ? "—" : brl(x.custo)}</td>
             <td class="n">${x.custo == null ? "—" : `<span class="${x.resultado < 0 ? "t-atr" : ""}">${brl(x.resultado)}</span>`}</td><td class="n">${mg(x.margem_pct)}</td>
             <td><div class="mg-acts"><button class="st-b" data-mge="${x.entidade_id}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button>${x.custo == null ? "" : botaoRel("e", x.entidade_id)}</div></td></tr>`))}</div>
-    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo inclui pró-labore da Cris e remuneração do Jean (decisão de 19/11/2026), encargos reais (FGTS e INSS), benefícios, provisão de 13º e férias, estrutura (sistemas, ocupação, CRC, mentoria em 12 meses). Aquisição de clientes e despesas pessoais dos sócios ficam fora. Horas em clientes sem contrato ativo não entram em nenhum grupo.</div>
+    <div style="color:var(--ink3);font-size:12.5px;margin:10px 4px">Custo inclui tributos (Simples/DAS sobre a nota, decisão de 21/11/2026), pró-labore da Cris e remuneração do Jean (decisão de 19/11/2026), encargos reais (FGTS e INSS), benefícios, provisão de 13º e férias, estrutura (sistemas, ocupação, CRC, mentoria em 12 meses). A margem é medida sobre o honorário cheio. Aquisição de clientes e despesas pessoais dos sócios ficam fora. Horas em clientes sem contrato ativo não entram em nenhum grupo.</div>
     ${linhaAgora(neg.length ? `Renegociar os <b>${neg.length}</b> grupos no prejuízo — começar por <b>${esc([...neg].sort((a, b) => a.resultado - b.resultado)[0].grupo)}</b>, com o relatório de custo pronto no botão ao lado da situação.` : "Nenhum grupo no prejuízo nesta competência.")}`;
   $$("tr.gr").forEach((t) => (t.onclick = () => { const g = t.dataset.g; abertos.has(g) ? abertos.delete(g) : abertos.add(g); telaMargem(); }));
   $$("[data-seg=mg]").forEach((b) => (b.onclick = () => { st.margemModo = b.dataset.k; telaMargem(); }));
@@ -630,10 +632,10 @@ async function analiseMargem(args) {
   const falta = r.honorario_sugerido > r.honorario ? r.honorario_sugerido - r.honorario : 0;
   $(".gb", g).innerHTML =
     bloco("Resultado do mês", `<div class="am-g">
-      ${kv("Honorário", brl(r.honorario))}${kv(`Receita líquida (− DAS ${n0(r.das_pct)}%)`, brl(r.receita_liquida))}
-      ${kv("Custo de servir", brl(r.custo))}${kv("Resultado", brl(r.resultado), r.resultado < 0 ? "t-atr" : "t-ok")}
+      ${kv("Honorário", brl(r.honorario))}${kv(`Tributos (DAS ${n0(r.das_pct)}%)`, "− " + brl(r.tributos ?? r.honorario - r.receita_liquida))}
+      ${kv("Custo de servir", "− " + brl(r.custo))}${kv("Resultado", brl(r.resultado), r.resultado < 0 ? "t-atr" : "t-ok")}
       ${kv("Horas apontadas", n1(r.horas) + "h")}${kv("Custo médio por hora", r.horas ? "R$ " + n1(r.custo / r.horas) : "—")}</div>
-      ${falta ? `<div class="am-al">Para ${n0(r.margem_alvo_pct)}% de margem, o honorário precisaria ser <b>${brl(r.honorario_sugerido)}</b>: <b>+${brl(falta)}</b> por mês, ou ${n1((r.custo - r.receita_liquida * (1 - r.margem_alvo_pct / 100)) / (r.custo / r.horas || 1))} horas a menos no mês com o honorário atual.</div>` : ""}`) +
+      ${falta ? `<div class="am-al">Para ${n0(r.margem_alvo_pct)}% de margem, o honorário precisaria ser <b>${brl(r.honorario_sugerido)}</b>: <b>+${brl(falta)}</b> por mês, ou ${n1((r.custo - (r.receita_liquida - r.honorario * (r.margem_alvo_pct / 100))) / (r.custo / r.horas || 1))} horas a menos no mês com o honorário atual.</div>` : ""}`) +
     bloco("Custo por departamento", (d.departamentos || []).map((k) => `<div class="mg-l"><span>${esc(k.departamento)}</span><span class="tr"><i style="width:${k.pct}%"></i></span><b>${brl(k.custo)}</b><small>${n1(k.horas)}h × R$ ${n0(k.custo_hora)}</small></div>`).join("") || '<div style="color:var(--ink3);font-size:13px">Sem horas apontadas na competência.</div>') +
     bloco("Quem trabalhou", (d.colaboradores || []).map((c) => `<div class="am-c"><b>${esc(curto(c.colaborador))}</b><span>${n1(c.horas)}h</span><small>${esc(c.setores)}</small></div>`).join("") + (d.horas_internas ? `<div style="font-size:12px;color:var(--ink3);margin-top:6px">${n1(d.horas_internas)}h lançadas como "Outros" ficam no custo comum, não neste cliente.</div>` : "")) +
     (grupo ? bloco("CNPJs do grupo", `<div class="tbw"><table class="tb mini"><thead><tr><th>CNPJ</th><th class="n">Honorário</th><th class="n">Custo</th><th class="n">Resultado</th><th></th></tr></thead><tbody>${(d.cnpjs || []).map((c) => `<tr data-amc="${c.entidade_id}"><td><b>${esc(c.sigla || "—")}</b><div style="font-size:11.5px;color:var(--ink3)">${esc(c.cliente || "")}</div></td><td class="n">${brl(c.honorario)}</td><td class="n">${c.custo == null ? "—" : brl(c.custo)}</td><td class="n"><span class="${c.resultado < 0 ? "t-atr" : ""}">${c.custo == null ? "—" : brl(c.resultado)}</span></td><td>${pillSem(c.status)}</td></tr>`).join("")}</tbody></table></div>
@@ -661,7 +663,7 @@ function relatorioCliente(d, { margem = true, janela = null } = {}) { // margem 
   const NOME = { "Contábil": "Contabilidade", "DP": "Departamento Pessoal", "BPO": "BPO Financeiro", "Legalização": "Legalização e certificações", "Fiscal": "Fiscal" };
   const totH = r.horas || 0, totC = r.custo || 0;
   // Valor do serviço entregue = custo da área ÷ ((1 − Simples) × (1 − margem mínima)): preço que o trabalho deveria ter
-  const das = (r.das_pct ?? 11) / 100, alvo = (r.margem_alvo_pct ?? 40) / 100, fator = (1 - das) * (1 - alvo);
+  const das = (r.das_pct ?? 11) / 100, alvo = (r.margem_alvo_pct ?? 40) / 100, fator = 1 - das - alvo; // tributos no custo (21/11/2026)
   const preco = (custo) => (+custo || 0) / fator;
   const totV = (d.departamentos || []).reduce((s, k) => s + preco(k.custo), 0) || preco(totC);
   const cobreV = totV ? Math.round((100 * (r.honorario || 0)) / totV) : null;
@@ -738,7 +740,7 @@ td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
   </tbody></table>
   <h2>Leitura do mês</h2>
   <div class="box">${leitura.map((t) => `<p>${t}</p>`).join("")}${s.tickets_90d ? `<p>Nos últimos 90 dias foram <b>${s.tickets_90d}</b> atendimentos pelo WhatsApp${s.resp_mediana_min != null ? `, com primeira resposta em <b>${Math.round(s.resp_mediana_min)} min</b> (mediana)` : ""}.</p>` : ""}</div>
-  <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do serviço multiplica as horas de cada área pelo preço-hora de referência da Utarget para aquela área, que cobre a equipe, encargos, benefícios, a estrutura do escritório, os tributos e a margem mínima de operação. ${margem ? "A margem atual é a diferença entre o honorário, líquido do Simples Nacional, e o custo do trabalho entregue, sobre o honorário líquido. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
+  <p class="met">Metodologia: horas lançadas pela equipe da Utarget na competência de ${mesRef}, por área. O valor do serviço multiplica as horas de cada área pelo preço-hora de referência da Utarget para aquela área, que cobre a equipe, encargos, benefícios, a estrutura do escritório, os tributos e a margem mínima de operação. ${margem ? "A margem atual desconta do honorário os tributos (Simples Nacional) e o custo do trabalho entregue, medida sobre o honorário cheio. " : ""}Trabalho feito para mais de uma empresa do grupo pode estar registrado na matriz.</p>
   <div class="rod"><span>Utarget Contabilidade &amp; Assessoria · especializada no Terceiro Setor desde 2016</span><span>WhatsApp (11) 2642-8636 · utarget.com.br</span></div>
 </div></body></html>`;
   const w = janela || window.open("", "_blank");
