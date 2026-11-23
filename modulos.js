@@ -1073,6 +1073,43 @@ async function telaPortal() {
   const pend = d.bloqueios.length + d.certidao_fila.length + minhas.length;
   const certAlerta = d.certificacoes.filter((c) => ["vencido", "critico", "atencao"].includes(c.semaforo));
   const conAbertas = d.conecta.filter((c) => c.encaixe !== "bloqueado");
+
+  // ---- Central de prazos: auditoria visual (uma linha por obrigação, não por unidade) ----
+  const przs = d.prazos || [];
+  const LEIS = {
+    "Folha de pagamento": ["CLT, art. 459, §1º: salário pago até o 5º dia útil do mês seguinte.", "Atraso gera multa administrativa e passivo trabalhista."],
+    "13º salário": ["Lei 4.749/1965: 1ª parcela até 30/11 e 2ª até 20/12.", "Atraso gera multa administrativa por empregado."],
+    "Férias": ["CLT, arts. 134 e 145: pagamento até 2 dias antes do início.", "Fora do prazo, a remuneração é devida em dobro (CLT, art. 137)."],
+    "Rescisão": ["CLT, art. 477, §6º: verbas pagas em até 10 dias do desligamento.", "Atraso gera multa de um salário ao trabalhador (art. 477, §8º)."],
+    "Pagamento / obrigação": ["Encargos e tributos: Lei 8.036/1990 (FGTS), Lei 8.212/1991 (INSS) e LC 123/2006 (DAS).", "Atraso gera multa e juros automáticos."],
+    "Prestação de contas": ["Lei 13.019/2014 (MROSC), arts. 63 a 72: prazo fixado no termo da parceria.", "Omissão leva à rejeição das contas e impede novas parcerias."],
+    "Mandato": ["Estatuto da entidade e Código Civil: diretoria eleita com ata registrada.", "Mandato vencido trava certidões, bancos e parcerias."],
+    "Certificação": ["Cada certificação tem lei própria (ex.: CEBAS, LC 187/2021).", "Protocolar a renovação antes do vencimento preserva os efeitos."],
+    "Tarefa com você": ["Prazo combinado entre você e a Utarget.", "O atraso segura o andamento do próprio pedido."]
+  };
+  const ORD_CAT = Object.keys(LEIS);
+  const grupão = d.grupo.length > 1;
+  const agrupa = (lista, kd, kr) => { const m = new Map(); for (const p of lista) { const k = p[kd] + "|" + p[kr]; if (!m.has(k)) m.set(k, { ...p, sigs: [] }); if (p.sigla) m.get(k).sigs.push(p.sigla); } return [...m.values()]; };
+  const unidades = (g) => { const u = [...new Set(g.sigs)]; if (!grupão || !u.length) return ""; return u.length === 1 ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(u[0])}</span>` : ` <span class="pt-chip" data-tip="${esc(u.join(", "))}">${u.length} unidades</span>`; };
+  const przG = agrupa(przs, "data", "rot").sort((a, b) => a.dias - b.dias);
+  const sitPill = (dias) => dias < 0 ? `<span class="pill atr">vencido há ${-dias} d</span>` : dias === 0 ? '<span class="pill risco">hoje</span>' : dias <= 7 ? `<span class="pill risco">em ${dias} d</span>` : `<span class="pill neu">em ${dias} d</span>`;
+  const audCards = ORD_CAT.map((cat) => {
+    const its = przG.filter((p) => p.cat === cat); if (!its.length) return "";
+    const venc = its.filter((p) => p.dias < 0).length, p7 = its.filter((p) => p.dias >= 0 && p.dias <= 7).length;
+    const prox = its.find((p) => p.dias >= 0);
+    const cls = venc ? "atr" : p7 ? "risco" : "ok";
+    return `<div class="pt-aud ${cls}">
+      <div class="pt-aud-h"><b>${esc(cat)}</b><span>${venc ? `<span class="pill atr">${venc} vencida${venc > 1 ? "s" : ""}</span>` : ""}${p7 ? `<span class="pill risco">${p7} em 7 d</span>` : ""}${!venc && !p7 ? '<span class="pill ok">em dia</span>' : ""}</span></div>
+      ${prox ? `<div class="pt-aud-n">Próximo: <b>${dmy(prox.data)}</b> — ${esc(prox.rot)}${unidades(prox)}</div>` : `<div class="pt-aud-n">Nada a vencer no período.</div>`}
+      <div class="pt-aud-l">${LEIS[cat][0]}</div>
+      <div class="pt-aud-l ${venc ? "atr" : ""}">${LEIS[cat][1]}</div>
+    </div>`;
+  }).join("");
+  const vencN = przG.filter((p) => p.dias < 0).length;
+  const sem = []; const hoje = new Date();
+  for (let w = 0; w < 8; w++) { const its = przG.filter((p) => p.dias >= w * 7 && p.dias < w * 7 + 7); const f = new Date(hoje); f.setDate(f.getDate() + w * 7); sem.push({ rot: w === 0 ? "esta semana" : `${f.getDate()}/${f.getMonth() + 1}`, n: its.length, cls: w === 0 ? "risco" : "neu", tip: [...new Set(its.map((i) => i.rot))].slice(0, 6).join(" · ") }); }
+  const maxSem = Math.max(1, vencN, ...sem.map((s) => s.n));
+  const colSem = (rot, n, cls, tip) => `<div class="pt-sem-c" ${tip ? `data-tip="${esc(tip)}"` : ""}><b>${n || ""}</b><i class="${cls}" style="height:${n ? Math.max(8, Math.round((n * 100) / maxSem)) : 2}%"></i><span>${rot}</span></div>`;
   $("#view").innerHTML = `
     ${d.preview ? `<div class="pt-alerta" style="margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Você está vendo o portal <b>como ${esc(d.ent.sigla)} vê</b>. As ações desta tela são do cliente.</span><button class="btn-m" id="pt-sair">Sair da visão</button></div>` : ""}
     <div class="kpis k4">
@@ -1082,9 +1119,14 @@ async function telaPortal() {
       ${kpiM("Oportunidades de captação", conAbertas.length, "janelas com encaixe da sua OSC", conAbertas.length ? "ok" : "neu")}
     </div>
 
-    <section class="card" id="pt-prz" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Central de prazos</h2><p>Pagamentos, férias, rescisões, 13º, prestação de contas, mandato e certificações da sua entidade.</p></div></div>
-      ${tabela([["Data", "n"], ["O quê"], ["Categoria"], ["Situação"]], (d.prazos || []).map((p) => `<tr style="cursor:default"><td class="n" style="white-space:nowrap">${dmy(p.data)}</td><td style="font-size:12.5px">${esc(p.rot)}${d.grupo.length > 1 && p.sigla ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(p.sigla)}</span>` : ""}</td><td style="font-size:12px;color:var(--ink2)">${esc(p.cat)}${p.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td>${p.dias < 0 ? `<span class="pill atr">vencido há ${-p.dias} d</span>` : p.dias === 0 ? '<span class="pill risco">hoje</span>' : p.dias <= 7 ? `<span class="pill risco">em ${p.dias} d</span>` : `<span class="pill neu">em ${p.dias} d</span>`}</td></tr>`), "Nenhum prazo nos próximos meses.")}
-      <p style="font-size:11.5px;color:var(--ink3);margin:10px 4px 0">Fontes: agenda de obrigações da Utarget, mandato e certificações. O vencimento da mensalidade da Utarget entra aqui quando o financeiro for ligado ao portal.</p>
+    <section class="card" id="pt-prz" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Central de prazos</h2><p>Auditoria de conformidade da sua entidade: o que a lei exige, o que vence e quando.</p></div></div>
+      ${przG.length ? `
+      <div class="pt-sem" aria-label="Prazos por semana">${colSem("vencidos", vencN, "atr", [...new Set(przG.filter((p) => p.dias < 0).map((i) => i.rot))].slice(0, 6).join(" · "))}${sem.map((s) => colSem(s.rot, s.n, s.cls, s.tip)).join("")}</div>
+      <div class="pt-aud-g">${audCards}</div>
+      <details class="pt-det"${vencN ? " open" : ""}><summary>Agenda completa (${przG.length} ${przG.length === 1 ? "prazo" : "prazos"})</summary>
+      ${tabela([["Data", "n"], ["O quê"], ["Categoria"], ["Situação"]], przG.map((p) => `<tr style="cursor:default"><td class="n" style="white-space:nowrap">${dmy(p.data)}</td><td style="font-size:12.5px">${esc(p.rot)}${unidades(p)}</td><td style="font-size:12px;color:var(--ink2)">${esc(p.cat)}${p.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td>${sitPill(p.dias)}</td></tr>`))}
+      </details>` : `<div class="vazio-g">Nenhum prazo nos próximos meses.</div>`}
+      <p style="font-size:11.5px;color:var(--ink3);margin:10px 4px 0">Fontes: agenda de obrigações da Utarget, mandato e certificações. A mesma obrigação em várias unidades aparece uma vez, com o total de unidades. O vencimento da mensalidade da Utarget entra aqui quando o financeiro for ligado ao portal.</p>
     </section>
     <section class="card" id="pt-pend" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>O que precisamos de você</h2><p>Enviou, a Utarget confere e a pendência some daqui.</p></div></div>
       ${pend ? `<div class="pt-lista">` +
@@ -1110,8 +1152,9 @@ async function telaPortal() {
 
     <section class="card" id="pt-dp" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Departamento pessoal</h2><p>Folhas, férias, rescisões e encargos da sua equipe no calendário da Utarget.</p></div></div>
       ${(() => { const dp = docs.dp || []; const venc = dp.filter((x) => x.dias < 0).length, prox = dp.filter((x) => x.dias >= 0 && x.dias <= 7).length;
+        const dpG = agrupa(dp, "vencimento", "nome").sort((a, b) => a.dias - b.dias);
         return `<div class="kpis k4" style="margin-bottom:12px">${kpiM("Obrigações de DP no período", dp.length, "últimos 60 e próximos 90 dias", "neu")}${kpiM("Vencidas", venc, venc ? "em tratamento com a equipe" : "nada vencido", venc ? "atr" : "ok")}${kpiM("Nos próximos 7 dias", prox, "folhas e encargos a vencer", prox ? "risco" : "ok")}${kpiM("Com multa se atrasar", dp.filter((x) => x.multa).length, "prioridade absoluta", dp.some((x) => x.multa && x.dias < 0) ? "atr" : "neu")}</div>` +
-        (dp.length ? tabela([["Vencimento", "n"], ["Obrigação"], ["Situação"]], dp.map((x) => `<tr style="cursor:default"><td class="n" style="white-space:nowrap">${dmy(x.vencimento)}</td><td style="font-size:12.5px">${esc(x.nome)}${d.grupo.length > 1 ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(x.sigla)}</span>` : ""}${x.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td>${x.dias < 0 ? `<span class="pill atr">vencida há ${-x.dias} d</span>` : x.dias <= 7 ? `<span class="pill risco">em ${x.dias} d</span>` : `<span class="pill neu">em ${x.dias} d</span>`}</td></tr>`)) : `<div class="vazio-g">Nenhuma obrigação de DP aberta no período.</div>`);
+        (dpG.length ? `<details class="pt-det"${venc ? " open" : ""}><summary>Calendário de DP (${dpG.length} ${dpG.length === 1 ? "obrigação" : "obrigações"})</summary>` + tabela([["Vencimento", "n"], ["Obrigação"], ["Situação"]], dpG.map((x) => `<tr style="cursor:default"><td class="n" style="white-space:nowrap">${dmy(x.vencimento)}</td><td style="font-size:12.5px">${esc(x.nome)}${unidades(x)}${x.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td>${sitPill(x.dias)}</td></tr>`)) + `</details>` : `<div class="vazio-g">Nenhuma obrigação de DP aberta no período.</div>`);
       })()}
       <p style="font-size:11.5px;color:var(--ink3);margin:10px 4px 0">Quadro de funcionários, holerites e eventos do eSocial entram aqui quando a carga de RH for ligada ao portal.</p>
     </section>
