@@ -1081,6 +1081,10 @@ async function telaPortal() {
       ${kpiM("Oportunidades de captação", conAbertas.length, "janelas com encaixe da sua OSC", conAbertas.length ? "ok" : "neu")}
     </div>
 
+    <section class="card" id="pt-prz" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Central de prazos</h2><p>Pagamentos, férias, rescisões, 13º, prestação de contas, mandato e certificações da sua entidade.</p></div></div>
+      ${tabela([["Data", "n"], ["O quê"], ["Categoria"], ["Situação"]], (d.prazos || []).map((p) => `<tr style="cursor:default"><td class="n" style="white-space:nowrap">${dmy(p.data)}</td><td style="font-size:12.5px">${esc(p.rot)}${d.grupo.length > 1 && p.sigla ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(p.sigla)}</span>` : ""}</td><td style="font-size:12px;color:var(--ink2)">${esc(p.cat)}${p.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td>${p.dias < 0 ? `<span class="pill atr">vencido há ${-p.dias} d</span>` : p.dias === 0 ? '<span class="pill risco">hoje</span>' : p.dias <= 7 ? `<span class="pill risco">em ${p.dias} d</span>` : `<span class="pill neu">em ${p.dias} d</span>`}</td></tr>`), "Nenhum prazo nos próximos meses.")}
+      <p style="font-size:11.5px;color:var(--ink3);margin:10px 4px 0">Fontes: agenda de obrigações da Utarget, mandato e certificações. O vencimento da mensalidade da Utarget entra aqui quando o financeiro for ligado ao portal.</p>
+    </section>
     <section class="card" id="pt-pend" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>O que precisamos de você</h2><p>Enviou, a Utarget confere e a pendência some daqui.</p></div></div>
       ${pend ? `<div class="pt-lista">` +
         d.bloqueios.map((b) => { const t = BLOQ_TIPO[b.motivo] || "documento"; return `<div class="pt-item"><div><b>${rotulo(b.motivo)}</b>${d.grupo.length > 1 ? ` · ${esc(b.sigla)}` : ""}<div class="pt-sub">${esc(b.detalhe || BLOQ_TXT[t])} · pendente desde ${dmy(b.desde)}</div></div><button class="btn-p" data-envb="${b.id}" data-t="${t}">Enviar documento</button></div>`; }).join("") +
