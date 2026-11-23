@@ -157,7 +157,7 @@ async function telaInicio() {
   const hoje = hojeISO();
   const h = +new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
   cabecalho("Início", extenso(hoje));
-  const outros = (st.mods || []).filter((x) => !["tarefas", "acessos"].includes(x.codigo));
+  const outros = (st.mods || []).filter((x) => !["tarefas", "acessos", "portal"].includes(x.codigo));
   $("#view").innerHTML = `
     <div class="ini-h"><div><h2>${h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"}, ${esc(limpa(st.eu.nome).split(" ")[0])}.</h2><p id="ini-frase">Juntando o que pede atenção nas suas áreas…</p></div>
       <button class="btn p" id="ini-go" hidden>Resolver o mais grave</button></div>

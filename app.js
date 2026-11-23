@@ -206,7 +206,7 @@ function cabecalho(t, s) { $("#titulo").textContent = t; $("#subtitulo").textCon
 function renderView() {
   if (!$("#view")) return;
   if (!st.carregado) return esqueleto();
-  if (!navItens().some((a) => a[0] === st.view)) st.view = "inicio";
+  if (!navItens().some((a) => a[0] === st.view) && !(st.view === "portal" && st.portalPrev)) st.view = "inicio";
   if (MODS[st.view]) MODS[st.view]();
   else if (st.view === "painel") painel();
   else if (st.view === "modelos") telaModelos();
