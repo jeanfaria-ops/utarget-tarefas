@@ -1060,7 +1060,8 @@ async function telaPortal() {
   carregandoView();
   const prev = st.eu?.papel !== "cliente" ? st.portalPrev : null;
   if (st.eu?.papel !== "cliente" && !prev) return erroView(new Error("Escolha uma entidade na Carteira e use \"Ver como o cliente\" na ficha."));
-  let d, fin; try { [d, fin] = await Promise.all([rpcMod("app_cli_painel", prev ? { p_entidade: prev.id } : {}), rpcMod("app_cli_fin", prev ? { p_entidade: prev.id } : {}).catch(() => null)]); } catch (e) { return erroView(e); }
+  let d, fin, docs; try { [d, fin, docs] = await Promise.all([rpcMod("app_cli_painel", prev ? { p_entidade: prev.id } : {}), rpcMod("app_cli_fin", prev ? { p_entidade: prev.id } : {}).catch(() => null), rpcMod("app_cli_docs", prev ? { p_entidade: prev.id } : {}).catch(() => null)]); } catch (e) { return erroView(e); }
+  docs = docs || { institucional: [], certidoes: [], atas: [], dp: [] };
   if (!d || !d.ent) return erroView(new Error(prev ? "Entidade não encontrada." : "Seu acesso ainda não está ligado a uma entidade. Fale com a Utarget pelo WhatsApp (11) 2642-8636."));
   cabecalho(d.ent.sigla, d.ent.razao);
   const agir = (fn) => (d.preview ? () => alert("Visão de demonstração: esta ação é feita pelo cliente, logado no portal.") : fn);
@@ -1091,7 +1092,28 @@ async function telaPortal() {
         d.certidao_fila.map((f, i) => `<div class="pt-item"><div><b>Certidão ${esc(f.tipo)}</b>${d.grupo.length > 1 ? ` · ${esc(f.sigla)}` : ""}<div class="pt-sub">${esc(f.nome || "")} · ${humano(f.motivo || "")}${f.portal_url ? ` · <a class="link" target="_blank" rel="noopener" href="${esc(f.portal_url)}">emitir no portal do órgão</a>` : ""}</div></div><button class="btn-p" data-envf="${i}">Enviar certidão</button></div>`).join("") +
         minhas.map((t) => `<div class="pt-item"><div><b>${esc(t.titulo)}</b><div class="pt-sub">${esc(t.detalhe || "")}${t.prazo ? " · prazo " + dmy(t.prazo) : ""}</div></div><span style="display:flex;gap:6px"><button class="btn-m" data-envt="${t.id}">Enviar arquivo</button><button class="btn-m" data-ft="${t.id}">Concluir</button></span></div>`).join("") +
         `</div>` : `<div class="vazio-g">Nenhuma pendência com você. Tudo em dia.</div>`}
-      ${d.certidoes.length ? `<h4 style="margin:16px 4px 8px;font-size:13px">Certidões da entidade</h4>` + tabela([["Certidão"], ["Verificada", "n"], ["Situação"]], d.certidoes.map((c) => `<tr style="cursor:default"><td style="font-size:12.5px">${esc(c.tipo)}<div style="font-size:11px;color:var(--ink3)">${esc(c.orgao_emissor || "")}</div></td><td class="n">${dmy(c.verificado_em)}</td><td>${pillSem(c.semaforo)}</td></tr>`)) : ""}
+    </section>
+
+    <section class="card" id="pt-doc" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Documentos da entidade</h2><p>Estatuto, atas registradas e certidões — sempre a versão que vale.</p></div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px">
+        <div><h4 style="margin:0 0 8px;font-size:13px">Estatuto e institucionais</h4>
+          ${docs.institucional.length ? tabela([["Documento"], ["", "n"]], docs.institucional.map((x, i) => `<tr style="cursor:default"><td style="font-size:12.5px">${esc(x.nome)}</td><td class="n"><button class="btn-m" data-dinst="${i}">Baixar</button></td></tr>`)) : `<div class="vazio-g">A Utarget publica aqui o estatuto vigente e os documentos institucionais.</div>`}
+          <h4 style="margin:14px 0 8px;font-size:13px">Atas de diretoria</h4>
+          ${docs.atas.length ? tabela([["Mandato"], ["Registro", "n"], ["", "n"]], docs.atas.map((a, i) => `<tr style="cursor:default"><td style="font-size:12.5px">${dmy(a.inicio)} a ${dmy(a.fim)} ${a.vigente ? '<span class="pill ok">vigente</span>' : ""}</td><td class="n">${dmy(a.registro)}</td><td class="n">${a.path || a.url ? `<button class="btn-m" data-data="${i}">Baixar</button>` : '<span style="font-size:11px;color:var(--ink3)">com a Utarget</span>'}</td></tr>`)) : `<div class="vazio-g">Nenhuma ata registrada no sistema ainda.</div>`}
+        </div>
+        <div><h4 style="margin:0 0 8px;font-size:13px">Certidões</h4>
+          ${docs.certidoes.length ? tabela([["Certidão"], ["Validade", "n"], ["Situação"], ["", "n"]], docs.certidoes.map((c, i) => `<tr style="cursor:default"><td style="font-size:12.5px">${esc(c.tipo)}${d.grupo.length > 1 ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(c.sigla)}</span>` : ""}<div style="font-size:11px;color:var(--ink3)">${esc(c.orgao || "")}</div></td><td class="n">${dmy(c.validade)}</td><td>${pillSem(c.situacao)}</td><td class="n">${c.path ? `<button class="btn-m" data-dcert="${i}">Baixar</button>` : ""}</td></tr>`)) : `<div class="vazio-g">Nenhuma certidão registrada.</div>`}
+        </div>
+      </div>
+      ${d.preview ? `<div style="margin-top:14px;border-top:1px dashed var(--linha);padding-top:12px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:13px">Equipe · publicar institucional</b><button class="btn-m" id="pt-iup">Escolher PDFs…</button><input id="pt-ifile" type="file" hidden accept=".pdf" multiple><span id="pt-imsg" style="font-size:12px;color:var(--ink3)"></span></div><div style="font-size:11px;color:var(--ink3);margin-top:4px">Vai para institucional/ da entidade (estatuto, regimento, comprovantes de inscrição). Ata entra pelo fluxo "Enviar ata" (ficha/bloqueio), que atualiza a diretoria.</div></div>` : ""}
+    </section>
+
+    <section class="card" id="pt-dp" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Departamento pessoal</h2><p>Folhas, férias, rescisões e encargos da sua equipe no calendário da Utarget.</p></div></div>
+      ${(() => { const dp = docs.dp || []; const venc = dp.filter((x) => x.dias < 0).length, prox = dp.filter((x) => x.dias >= 0 && x.dias <= 7).length;
+        return `<div class="kpis k4" style="margin-bottom:12px">${kpiM("Obrigações de DP no período", dp.length, "últimos 60 e próximos 90 dias", "neu")}${kpiM("Vencidas", venc, venc ? "em tratamento com a equipe" : "nada vencido", venc ? "atr" : "ok")}${kpiM("Nos próximos 7 dias", prox, "folhas e encargos a vencer", prox ? "risco" : "ok")}${kpiM("Com multa se atrasar", dp.filter((x) => x.multa).length, "prioridade absoluta", dp.some((x) => x.multa && x.dias < 0) ? "atr" : "neu")}</div>` +
+        (dp.length ? tabela([["Vencimento", "n"], ["Obrigação"], ["Situação"]], dp.map((x) => `<tr style="cursor:default"><td class="n" style="white-space:nowrap">${dmy(x.vencimento)}</td><td style="font-size:12.5px">${esc(x.nome)}${d.grupo.length > 1 ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(x.sigla)}</span>` : ""}${x.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td>${x.dias < 0 ? `<span class="pill atr">vencida há ${-x.dias} d</span>` : x.dias <= 7 ? `<span class="pill risco">em ${x.dias} d</span>` : `<span class="pill neu">em ${x.dias} d</span>`}</td></tr>`)) : `<div class="vazio-g">Nenhuma obrigação de DP aberta no período.</div>`);
+      })()}
+      <p style="font-size:11.5px;color:var(--ink3);margin:10px 4px 0">Quadro de funcionários, holerites e eventos do eSocial entram aqui quando a carga de RH for ligada ao portal.</p>
     </section>
 
     <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-bottom:16px">
@@ -1131,6 +1153,27 @@ async function telaPortal() {
     </section>`;
   const entDe = (id) => d.grupo.find((x) => x.id === id) || d.ent;
   const finDocs = (fin && fin.docs) || [];
+  const abreDoc = async (bucket, path) => { const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 600); if (error || !data?.signedUrl) return alert("Não foi possível abrir: " + (error?.message || "")); window.open(data.signedUrl, "_blank"); };
+  $$("[data-dinst]").forEach((b) => (b.onclick = () => abreDoc("portal", docs.institucional[+b.dataset.dinst].path)));
+  $$("[data-dcert]").forEach((b) => (b.onclick = () => { const c = docs.certidoes[+b.dataset.dcert]; abreDoc(c.bucket, c.path); }));
+  $$("[data-data]").forEach((b) => (b.onclick = () => { const a = docs.atas[+b.dataset.data]; if (a.path) abreDoc(a.bucket, a.path); else if (a.url) window.open(a.url, "_blank"); }));
+  const iup = $("#pt-iup");
+  if (iup) { const fi2 = $("#pt-ifile"), msg2 = $("#pt-imsg");
+    iup.onclick = () => fi2.click();
+    fi2.onchange = async () => {
+      const files = [...fi2.files]; if (!files.length) return;
+      iup.disabled = true; let ok = 0;
+      for (const f of files) {
+        msg2.textContent = `Enviando ${f.name}…`;
+        const limpo = f.name.replace(/[^\w.\- ()]+/g, "_");
+        const { error } = await sb.storage.from("portal").upload(`institucional/${d.ent.id}/${limpo}`, f, { contentType: "application/pdf", upsert: true });
+        if (error) { msg2.textContent = `Falhou em ${f.name}: ${error.message}`; iup.disabled = false; return; }
+        ok++;
+      }
+      msg2.textContent = `${ok} publicado${ok > 1 ? "s" : ""}.`;
+      limpaCacheMod(); setTimeout(telaPortal, 900);
+    };
+  }
   $$("[data-dlt]").forEach((b) => (b.onclick = async () => { const x = finDocs[+b.dataset.dlt]; const { data, error } = await sb.storage.from("portal").createSignedUrl(x.path, 600); if (error || !data?.signedUrl) return alert("Não foi possível abrir: " + (error?.message || "")); window.open(data.signedUrl, "_blank"); }));
   const fup = $("#pt-fup");
   if (fup) { const fi = $("#pt-ffile"), msg = $("#pt-fmsg");
