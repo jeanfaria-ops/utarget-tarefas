@@ -146,6 +146,7 @@ function universo() { // tarefas no escopo atual (Minhas / Equipe)
 
 // ---------------------------------------------------------------- casca
 function casca() {
+  if (st.eu?.papel === "cliente" || st.portalPrev) return cascaCliente();
   const nEntrada = st.base.filter((t) => t.status === "entrada").length;
   const abas = navItens();
   const grupoTar = ["gclick", "painel", "hoje", "entrada", "modelos"];
@@ -200,6 +201,50 @@ function irPara(v, filtros) {
   st.view = v;
   if (filtros) { st.f = { ...st.f, chip: "todas", dept: "", pessoa: "", cliente: "", dia: "", ...filtros }; }
   atualizaNav(); renderView(); window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+function cascaCliente() {
+  const demo = st.eu?.papel !== "cliente";
+  const tema = ls.get("tema", "auto");
+  const itens = [["topo", "Início", I.inicio], ["pt-pend", "Pendências", I.legalizacao || I.lista], ["pt-sit", "Situação", I.carteira || I.lista], ["pt-tar", "Tarefas", I.lista], ["pt-cap", "Captação", I.captacao || I.lista]];
+  app.innerHTML = `
+  <div class="shell">
+    <aside class="side">
+      <img class="logo" src="logo-azul.svg" alt="Utarget">
+      <nav class="nav" aria-label="Principal">
+        <div class="rot n1">Sua entidade</div>
+        ${itens.map(([k, n, ic], i) => `<button data-anc="${k}" ${i === 0 ? 'aria-current="page"' : ""}>${ic}<span>${n}</span></button>`).join("")}
+      </nav>
+      <div class="rot">Tema</div>
+      <div class="tema" role="group" aria-label="Tema">
+        ${[["auto", "Auto"], ["light", "Claro"], ["dark", "Escuro"]].map(([k, n]) => `<button data-t="${k}" aria-pressed="${tema === k}">${n}</button>`).join("")}
+      </div>
+      <div class="eu"><div class="av">${esc(ini(st.eu.nome))}</div>
+        <div><div class="n">${esc(curto(st.eu.nome))}</div><div class="p">${demo ? "Demonstração" : "Cliente"}</div></div>
+        <button id="sair" title="${demo ? "Sair da visão" : "Sair"}" aria-label="${demo ? "Sair da visão" : "Sair"}">${I.sair}</button></div>
+    </aside>
+    <div class="main">
+      <header class="top"><div class="in">
+        <img class="mlogo" src="logo-claro.svg" alt="Utarget">
+        <div class="tit"><h1 id="titulo"></h1><div class="sub" id="subtitulo"></div></div>
+        <button class="ib" id="att" title="Atualizar" aria-label="Atualizar">${I.att}</button>
+      </div></header>
+      <main class="view" id="view"></main>
+    </div>
+  </div>
+  <nav class="tabbar" style="--n:${itens.length}" aria-label="Principal">
+    ${itens.map(([k, n, ic], i) => `<button data-anc="${k}" ${i === 0 ? 'aria-current="page"' : ""}>${ic}<span>${n}</span></button>`).join("")}
+  </nav>`;
+  $$("[data-anc]").forEach((b) => (b.onclick = () => {
+    $$("[data-anc]").forEach((x) => x.dataset.anc === b.dataset.anc ? x.setAttribute("aria-current", "page") : x.removeAttribute("aria-current"));
+    if (b.dataset.anc === "topo") window.scrollTo({ top: 0, behavior: "smooth" });
+    else document.getElementById(b.dataset.anc)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+  $$("[data-t]").forEach((b) => (b.onclick = () => { ls.set("tema", b.dataset.t); aplicaTema(); casca(); renderView(); }));
+  $("#att").onclick = () => { limpaCacheMod(); renderView(); };
+  $("#sair").onclick = async () => {
+    if (demo) { try { history.replaceState(null, "", location.pathname + location.search); } catch {} window.close(); if (!window.closed) { st.portalPrev = null; st.view = "inicio"; casca(); renderView(); } }
+    else { await sb.auth.signOut(); location.reload(); }
+  };
 }
 function cabecalho(t, s) { $("#titulo").textContent = t; $("#subtitulo").textContent = s; document.title = t + " · Utarget"; }
 
