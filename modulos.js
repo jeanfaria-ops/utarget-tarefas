@@ -286,8 +286,9 @@ async function fichaEntidade(id) {
   $(".gh", g).innerHTML = `<button class="ib gx" aria-label="Fechar">${I.x}</button>
     <div class="ey">${esc(rotulo(e.status))}${e.municipio ? " · " + esc(e.municipio) + "/" + esc(e.uf || "") : ""}</div><h3>${esc(e.sigla)}</h3>
     <div class="gc">${esc(e.razao_social || "")}${e.cnpj ? " · CNPJ " + esc(e.cnpj) : ""}</div>
-    <div class="gp">${e.situacao_receita ? `<span class="pill ${e.situacao_receita === "ATIVA" ? "ok" : "atr"}">Receita: ${esc(e.situacao_receita)}</span>` : ""}${d.bloqueios.length ? `<span class="pill atr">${plural(d.bloqueios.length, "bloqueio", "bloqueios")}</span>` : ""}${d.mandato ? pillSem(d.mandato.situacao, "Mandato: " + rotulo(d.mandato.situacao)) : ""}</div>`;
+    <div class="gp">${e.situacao_receita ? `<span class="pill ${e.situacao_receita === "ATIVA" ? "ok" : "atr"}">Receita: ${esc(e.situacao_receita)}</span>` : ""}${d.bloqueios.length ? `<span class="pill atr">${plural(d.bloqueios.length, "bloqueio", "bloqueios")}</span>` : ""}${d.mandato ? pillSem(d.mandato.situacao, "Mandato: " + rotulo(d.mandato.situacao)) : ""}${st.eu?.papel !== "cliente" ? `<button class="btn-m" id="f-prev" title="Abrir o portal exatamente como esta OSC vê">Ver como o cliente</button>` : ""}</div>`;
   $(".gx", g).onclick = () => fecharGaveta();
+  const fp = $("#f-prev", g); if (fp) fp.onclick = () => { fecharGaveta(); st.portalPrev = { id, sigla: e.sigla }; irPara("portal"); };
   $(".gb", g).innerHTML =
     bloco("Trilha de conformidade", mini(null, d.trilha.map((t) => `<tr style="cursor:default"><td class="forte">${t.ordem}. ${esc(t.etapa)}</td><td>${pillSem(t.status)}</td><td style="font-size:12.5px;color:var(--ink2)">${esc(humano(t.proximo_passo || ""))}</td></tr>`), "Trilha ainda não medida.")) +
     (d.bloqueios.length ? bloco("Bloqueios abertos", mini(null, d.bloqueios.map((b) => `<tr style="cursor:default"><td class="forte">${esc(rotulo(b.motivo))}</td><td style="font-size:12.5px">${esc(b.detalhe || "")}</td><td class="n">${dmy(b.desde)}</td></tr>`))) : "") +
@@ -1057,9 +1058,12 @@ function gavetaEnvio(ctx, aoConcluir) {
 
 async function telaPortal() {
   carregandoView();
-  let d; try { d = await rpcMod("app_cli_painel"); } catch (e) { return erroView(e); }
-  if (!d || !d.ent) return erroView(new Error("Seu acesso ainda não está ligado a uma entidade. Fale com a Utarget pelo WhatsApp (11) 2642-8636."));
+  const prev = st.eu?.papel !== "cliente" ? st.portalPrev : null;
+  if (st.eu?.papel !== "cliente" && !prev) return erroView(new Error("Escolha uma entidade na Carteira e use \"Ver como o cliente\" na ficha."));
+  let d; try { d = await rpcMod("app_cli_painel", prev ? { p_entidade: prev.id } : {}); } catch (e) { return erroView(e); }
+  if (!d || !d.ent) return erroView(new Error(prev ? "Entidade não encontrada." : "Seu acesso ainda não está ligado a uma entidade. Fale com a Utarget pelo WhatsApp (11) 2642-8636."));
   cabecalho(d.ent.sigla, d.ent.razao);
+  const agir = (fn) => (d.preview ? () => alert("Visão de demonstração: esta ação é feita pelo cliente, logado no portal.") : fn);
   const BLOQ_TIPO = { mandato_vencido: "ata", mandato_nao_comprovado: "ata", mandato_em_disputa: "ata", certificacao_ausente: "certificacao", divida_ativa: "certidao", omissao_receita: "certidao", parcelamento: "certidao" };
   const BLOQ_TXT = { ata: "Envie a ata registrada da eleição da diretoria.", certificacao: "Envie o certificado ou o protocolo da inscrição.", certidao: "Envie a certidão que regulariza (negativa ou com efeito de negativa).", documento: "Envie o documento que regulariza." };
   const minhas = d.tarefas.filter((t) => t.lado === "cliente" && t.status === "aberta");
@@ -1069,6 +1073,7 @@ async function telaPortal() {
   const certAlerta = d.certificacoes.filter((c) => ["vencido", "critico", "atencao"].includes(c.semaforo));
   const conAbertas = d.conecta.filter((c) => c.encaixe !== "bloqueado");
   $("#view").innerHTML = `
+    ${d.preview ? `<div class="pt-alerta" style="margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Você está vendo o portal <b>como ${esc(d.ent.sigla)} vê</b>. As ações desta tela são do cliente.</span><button class="btn-m" id="pt-sair">Sair da visão</button></div>` : ""}
     <div class="kpis k4">
       ${kpiM("Pendências com você", pend, pend ? "resolva enviando o documento" : "nada pendente", pend ? "risco" : "ok")}
       ${kpiM("Com a Utarget", daUt.length + emConf, "pedidos e envios em conferência", "neu")}
@@ -1101,12 +1106,14 @@ async function telaPortal() {
       ${linhaAgora(pend ? `Resolver as <b>${pend}</b> pendências acima destrava projetos e certidões — comece pela mais antiga.` : conAbertas.length ? `Há <b>${conAbertas.length}</b> janela${conAbertas.length > 1 ? "s" : ""} de captação com encaixe: fale com a Utarget pelo WhatsApp (11) 2642-8636 para avaliar a proposta.` : "Tudo em dia. Qualquer novidade aparece aqui e avisamos você.")}
     </section>`;
   const entDe = (id) => d.grupo.find((x) => x.id === id) || d.ent;
-  $$("[data-envb]").forEach((b) => (b.onclick = () => { const bl = d.bloqueios.find((x) => x.id === b.dataset.envb); const e = d.grupo.find((x) => x.sigla === bl.sigla) || d.ent; gavetaEnvio({ tipo: b.dataset.t, titulo: rotulo(bl.motivo) + " · " + bl.sigla, contexto: bl.detalhe || "", ent: e, alvo_tipo: "bloqueio", alvo_id: bl.id }, telaPortal); }));
-  $$("[data-envf]").forEach((b) => (b.onclick = () => { const f = d.certidao_fila[+b.dataset.envf]; gavetaEnvio({ tipo: "certidao", titulo: `Certidão ${f.tipo} · ${f.sigla}`, contexto: f.nome || "", ent: entDe(f.entidade_id), tipo_codigo: f.tipo, alvo_tipo: "certidao_fila", alvo_id: f.tipo }, telaPortal); }));
-  $$("[data-envt]").forEach((b) => (b.onclick = () => { const t = d.tarefas.find((x) => x.id === b.dataset.envt); gavetaEnvio({ tipo: "tarefa", titulo: t.titulo, contexto: t.detalhe || "", ent: entDe(t.entidade_id), alvo_tipo: "portal_tarefa", alvo_id: t.id }, telaPortal); }));
-  $$("[data-ft]").forEach((b) => (b.onclick = async () => { if (!confirm("Marcar como concluída?")) return; const { error } = await sb.rpc("app_cli_tarefa_feita", { p_id: b.dataset.ft }); if (error) return alert(error.message); limpaCacheMod(); telaPortal(); }));
+  $$("[data-envb]").forEach((b) => (b.onclick = agir(() => { const bl = d.bloqueios.find((x) => x.id === b.dataset.envb); const e = d.grupo.find((x) => x.sigla === bl.sigla) || d.ent; gavetaEnvio({ tipo: b.dataset.t, titulo: rotulo(bl.motivo) + " · " + bl.sigla, contexto: bl.detalhe || "", ent: e, alvo_tipo: "bloqueio", alvo_id: bl.id }, telaPortal); })));
+  $$("[data-envf]").forEach((b) => (b.onclick = agir(() => { const f = d.certidao_fila[+b.dataset.envf]; gavetaEnvio({ tipo: "certidao", titulo: `Certidão ${f.tipo} · ${f.sigla}`, contexto: f.nome || "", ent: entDe(f.entidade_id), tipo_codigo: f.tipo, alvo_tipo: "certidao_fila", alvo_id: f.tipo }, telaPortal); })));
+  $$("[data-envt]").forEach((b) => (b.onclick = agir(() => { const t = d.tarefas.find((x) => x.id === b.dataset.envt); gavetaEnvio({ tipo: "tarefa", titulo: t.titulo, contexto: t.detalhe || "", ent: entDe(t.entidade_id), alvo_tipo: "portal_tarefa", alvo_id: t.id }, telaPortal); })));
+  $$("[data-ft]").forEach((b) => (b.onclick = agir(async () => { if (!confirm("Marcar como concluída?")) return; const { error } = await sb.rpc("app_cli_tarefa_feita", { p_id: b.dataset.ft }); if (error) return alert(error.message); limpaCacheMod(); telaPortal(); })));
+  const sair = $("#pt-sair");
+  if (sair) sair.onclick = () => { st.portalPrev = null; irPara("carteira"); };
   const nv = $("#pt-nova");
-  if (nv) nv.onclick = () => {
+  if (nv) nv.onclick = agir(() => {
     const g = gaveta(`<div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Pedido à Utarget</div><h3>O que você precisa?</h3></div>
       <div class="gb"><input id="pt-tt" class="inp" style="width:100%" maxlength="200" placeholder="Ex.: segunda via do balanço de 2025">
       <textarea id="pt-dt" class="inp" style="width:100%;min-height:90px;margin-top:10px" maxlength="2000" placeholder="Detalhe o que precisa (opcional)"></textarea>
@@ -1120,7 +1127,7 @@ async function telaPortal() {
       fecharGaveta(); limpaCacheMod(); telaPortal();
     };
     g.querySelector("#pt-tt").focus();
-  };
+  });
   ligaTips($("#view"));
 }
 
