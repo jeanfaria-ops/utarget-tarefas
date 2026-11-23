@@ -1096,11 +1096,11 @@ async function telaPortal() {
   const audCards = ORD_CAT.map((cat) => {
     const its = przG.filter((p) => p.cat === cat); if (!its.length) return "";
     const venc = its.filter((p) => p.dias < 0).length, p7 = its.filter((p) => p.dias >= 0 && p.dias <= 7).length;
-    const prox = its.find((p) => p.dias >= 0);
+    const prox = its.find((p) => p.dias >= 0), velho = prox ? null : its[0];
     const cls = venc ? "atr" : p7 ? "risco" : "ok";
     return `<div class="pt-aud ${cls}">
       <div class="pt-aud-h"><b>${esc(cat)}</b><span>${venc ? `<span class="pill atr">${venc} vencida${venc > 1 ? "s" : ""}</span>` : ""}${p7 ? `<span class="pill risco">${p7} em 7 d</span>` : ""}${!venc && !p7 ? '<span class="pill ok">em dia</span>' : ""}</span></div>
-      ${prox ? `<div class="pt-aud-n">Próximo: <b>${dmy(prox.data)}</b> — ${esc(prox.rot)}${unidades(prox)}</div>` : `<div class="pt-aud-n">Nada a vencer no período.</div>`}
+      ${prox ? `<div class="pt-aud-n">Próximo: <b>${dmy(prox.data)}</b> — ${esc(prox.rot)}${unidades(prox)}</div>` : velho ? `<div class="pt-aud-n">Vencido desde <b>${dmy(velho.data)}</b> — ${esc(velho.rot)}${unidades(velho)} · em tratamento com a equipe</div>` : `<div class="pt-aud-n">Nada no período.</div>`}
       <div class="pt-aud-l">${LEIS[cat][0]}</div>
       <div class="pt-aud-l ${venc ? "atr" : ""}">${LEIS[cat][1]}</div>
     </div>`;
