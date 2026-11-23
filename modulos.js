@@ -1152,9 +1152,29 @@ async function telaPortal() {
 
     <section class="card" id="pt-dp" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Departamento pessoal</h2><p>Folhas, férias, rescisões e encargos da sua equipe no calendário da Utarget.</p></div></div>
       ${(() => { const dp = docs.dp || []; const venc = dp.filter((x) => x.dias < 0).length, prox = dp.filter((x) => x.dias >= 0 && x.dias <= 7).length;
-        const dpG = agrupa(dp, "vencimento", "nome").sort((a, b) => a.dias - b.dias);
+        const TIPO_DP = [["Folha de pagamento", /folha/i], ["13º salário", /13º|décimo/i], ["Férias", /féria/i], ["Rescisões e desligamentos", /rescis|demiss|desligamento|indenizado|aviso prévio/i], ["Encargos (FGTS, INSS)", /fgts|inss|gps|encargo|darf|\bdas\b/i], ["Registro e eSocial", /e-?social|registro|formaliza/i]];
+        const LEIS_DP = { "Folha de pagamento": LEIS["Folha de pagamento"], "13º salário": LEIS["13º salário"], "Férias": LEIS["Férias"], "Rescisões e desligamentos": LEIS["Rescisão"], "Encargos (FGTS, INSS)": LEIS["Pagamento / obrigação"], "Registro e eSocial": ["CLT, art. 41: todo empregado registrado já na admissão; o eSocial é o meio oficial.", "Empregado sem registro gera multa por empregado (CLT, art. 47)."], "Outras obrigações": ["Calendário trabalhista do grupo, controlado pela Utarget.", "Atraso gera multa e passivo trabalhista."] };
+        const tipoDe = (n) => (TIPO_DP.find(([, re]) => re.test(n || "")) || ["Outras obrigações"])[0];
+        // Uma linha por obrigação: a mesma rotina em N unidades/datas vira um grupo com todas as datas no detalhe.
+        const porObr = new Map();
+        for (const x of dp) { const k = x.nome; if (!porObr.has(k)) porObr.set(k, { nome: x.nome, tipo: tipoDe(x.nome), its: [] }); porObr.get(k).its.push(x); }
+        const grs = [...porObr.values()].map((g) => { g.its.sort((a, b) => a.dias - b.dias); g.venc = g.its.filter((i) => i.dias < 0).length; g.prox = g.its.find((i) => i.dias >= 0); g.pior = g.its[0]; g.multa = g.its.some((i) => i.multa); g.sigs = [...new Set(g.its.map((i) => i.sigla).filter(Boolean))]; return g; }).sort((a, b) => a.pior.dias - b.pior.dias);
+        const tip = (g) => g.its.map((i) => `${dmy(i.vencimento)}${grupão && i.sigla ? " " + i.sigla : ""}${i.dias < 0 ? " (vencida)" : ""}`).join(" · ");
+        const cardsDP = Object.keys(LEIS_DP).map((tipo) => {
+          const its = grs.filter((g) => g.tipo === tipo); if (!its.length) return "";
+          const v = its.reduce((s, g) => s + g.venc, 0), p7 = its.reduce((s, g) => s + g.its.filter((i) => i.dias >= 0 && i.dias <= 7).length, 0);
+          const px = its.map((g) => g.prox).filter(Boolean).sort((a, b) => a.dias - b.dias)[0];
+          const velho = px ? null : its[0] && its[0].pior;
+          return `<div class="pt-aud ${v ? "atr" : p7 ? "risco" : "ok"}">
+            <div class="pt-aud-h"><b>${esc(tipo)}</b><span>${v ? `<span class="pill atr">${v} vencida${v > 1 ? "s" : ""}</span>` : ""}${p7 ? `<span class="pill risco">${p7} em 7 d</span>` : ""}${!v && !p7 ? '<span class="pill ok">em dia</span>' : ""}</span></div>
+            ${px ? `<div class="pt-aud-n">Próximo: <b>${dmy(px.vencimento)}</b> — ${esc(px.nome)}${grupão && px.sigla ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(px.sigla)}</span>` : ""}</div>` : velho ? `<div class="pt-aud-n">Vencido desde <b>${dmy(velho.vencimento)}</b> — ${esc(velho.nome)} · em tratamento com a equipe</div>` : ""}
+            <div class="pt-aud-l">${LEIS_DP[tipo][0]}</div><div class="pt-aud-l ${v ? "atr" : ""}">${LEIS_DP[tipo][1]}</div>
+          </div>`;
+        }).join("");
         return `<div class="kpis k4" style="margin-bottom:12px">${kpiM("Obrigações de DP no período", dp.length, "últimos 60 e próximos 90 dias", "neu")}${kpiM("Vencidas", venc, venc ? "em tratamento com a equipe" : "nada vencido", venc ? "atr" : "ok")}${kpiM("Nos próximos 7 dias", prox, "folhas e encargos a vencer", prox ? "risco" : "ok")}${kpiM("Com multa se atrasar", dp.filter((x) => x.multa).length, "prioridade absoluta", dp.some((x) => x.multa && x.dias < 0) ? "atr" : "neu")}</div>` +
-        (dpG.length ? `<details class="pt-det"${venc ? " open" : ""}><summary>Calendário de DP (${dpG.length} ${dpG.length === 1 ? "obrigação" : "obrigações"})</summary>` + tabela([["Vencimento", "n"], ["Obrigação"], ["Situação"]], dpG.map((x) => `<tr style="cursor:default"><td class="n" style="white-space:nowrap">${dmy(x.vencimento)}</td><td style="font-size:12.5px">${esc(x.nome)}${unidades(x)}${x.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td>${sitPill(x.dias)}</td></tr>`)) + `</details>` : `<div class="vazio-g">Nenhuma obrigação de DP aberta no período.</div>`);
+        (grs.length ? `<div class="pt-aud-g">${cardsDP}</div>
+        <details class="pt-det"><summary>Calendário completo (${grs.length} ${grs.length === 1 ? "rotina" : "rotinas"}, ${dp.length} vencimentos)</summary>` +
+        tabela([["Obrigação"], ["Vencimentos"], ["Situação"]], grs.map((g) => `<tr style="cursor:default"><td style="font-size:12.5px">${esc(g.nome)}${g.sigs.length > 1 ? ` <span class="pt-chip" data-tip="${esc(g.sigs.join(", "))}">${g.sigs.length} unidades</span>` : grupão && g.sigs[0] ? ` <span style="color:var(--ink3);font-size:11px">· ${esc(g.sigs[0])}</span>` : ""}${g.multa ? ' <span class="pill atr">multa</span>' : ""}</td><td style="font-size:12px;white-space:nowrap"><span data-tip="${esc(tip(g))}">${g.prox ? dmy(g.prox.vencimento) : dmy(g.pior.vencimento)}${g.its.length > 1 ? ` <span style="color:var(--ink3)">+${g.its.length - 1} data${g.its.length > 2 ? "s" : ""}</span>` : ""}</span></td><td>${g.venc ? `<span class="pill atr">${g.venc} vencida${g.venc > 1 ? "s" : ""}</span> ` : ""}${g.prox ? sitPill(g.prox.dias) : ""}</td></tr>`)) + `</details>` : `<div class="vazio-g">Nenhuma obrigação de DP aberta no período.</div>`);
       })()}
       <p style="font-size:11.5px;color:var(--ink3);margin:10px 4px 0">Quadro de funcionários, holerites e eventos do eSocial entram aqui quando a carga de RH for ligada ao portal.</p>
     </section>
