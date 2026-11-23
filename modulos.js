@@ -349,7 +349,7 @@ async function telaLegalizacao() {
     </div>
     <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Calendário de vencimentos</h2><p>Certificações e mandatos de diretoria por mês de vencimento, nos próximos 12 meses.</p></div></div>
       ${legenda([["Certificação", "var(--s1)"], ["Mandato", "var(--s2)"]])}${vizColunas(calLeg(d), ["Certificação", "Mandato"], { "Certificação": "var(--s1)", "Mandato": "var(--s2)" }, { destaque: "Vencidos" })}</section>
-    <div class="card"><div class="sec-h"><div><h2>${{ cert: "Certificações", mand: "Mandatos de diretoria", cdao: "Certidões por entidade", bloq: "Bloqueios e divergências", fila: "Fila de emissão de certidões" }[aba]}</h2><p>Ordenado pelo que vence primeiro. Clique na linha para abrir a ficha.</p></div>
+    <div class="card"><div class="sec-h"><div><h2>${{ cert: "Certificações", mand: "Mandatos de diretoria", cdao: "Certidões por entidade", bloq: "Bloqueios e divergências", fila: "Fila de emissão de certidões", env: "Envios do portal do cliente" }[aba]}</h2><p>Ordenado pelo que vence primeiro. Clique na linha para abrir a ficha.</p></div>
       ${segV("leg", [["cert", "Certificações"], ["mand", "Mandatos"], ["cdao", "Certidões"], ["bloq", "Bloqueios"], ["fila", `Fila (${d.fila.length})`], ["env", `Portal (${envios.length})`]], aba)}</div>${corpo[aba]()}</div>
     ${linhaAgora(cv.length || mv.length ? `Renovar as <b>${cv.length}</b> certificações vencidas ou críticas e regularizar os <b>${mv.length}</b> mandatos em alerta — cada caso está na aba correspondente.` : "Certificações e mandatos em dia.")}`;
   $$("[data-seg=leg]").forEach((b) => (b.onclick = () => { st.abaLeg = b.dataset.k; telaLegalizacao(); }));
@@ -976,7 +976,7 @@ function navItens() {
   // Por ora o G-Click segue como motor de execução: a área de tarefas é a central de prazos (espelho, só leitura).
   // As telas do motor próprio (Tarefas, Entrada, Modelos) voltam quando a migração do G-Click for decidida.
   if (temMod("tarefas")) it.push(["gclick", "Central de prazos", I.painel]);
-  (st.mods || []).filter((m) => m.codigo !== "tarefas").forEach((m) => it.push([m.codigo, m.nome, I[m.codigo] || I.lista]));
+  (st.mods || []).filter((m) => m.codigo !== "tarefas" && m.codigo !== "portal").forEach((m) => it.push([m.codigo, m.nome, I[m.codigo] || I.lista]));
   return it;
 }
 
