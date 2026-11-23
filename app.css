@@ -614,3 +614,23 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .agora .ag-r{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--azul-txt);flex:none}
 .pl-zero{opacity:.45}
 .filtros.stick{position:sticky;top:0;z-index:4;background:var(--sup);border-radius:14px 14px 0 0}
+
+/* Portal do cliente (23/11/2026) */
+.pt-lista{display:flex;flex-direction:column}
+.pt-item{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 4px;border-bottom:1px solid var(--linha);flex-wrap:wrap}
+.pt-item:last-child{border-bottom:0}
+.pt-item>div{min-width:0}
+.pt-sub{font-size:12px;color:var(--ink3);margin-top:2px}
+.pt-drop{display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;border:2px dashed var(--linha);border-radius:12px;padding:26px 16px;cursor:pointer;background:var(--fundo);text-align:center}
+.pt-drop:hover,.pt-drop:focus-visible{border-color:var(--azul)}
+.pt-drop span{font-size:12px;color:var(--ink3)}
+.pt-alerta{font-size:12.5px;background:var(--c-risco-f, #FFF4E0);color:#8A5300;border-radius:8px;padding:8px 12px;margin-top:10px}
+.pt-alerta.atr{background:#FDECEA;color:#B3261E}
+.pt-alerta.ok{background:#E8F5EE;color:#137333}
+.btn-p{font:600 13px Montserrat,sans-serif;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;background:var(--azul);color:#fff;white-space:nowrap}
+.btn-p:hover{background:#0063BA}
+.btn-p:disabled{opacity:.5;cursor:default}
+.btn-m{font:600 12.5px Montserrat,sans-serif;border:1px solid var(--linha);border-radius:8px;padding:7px 12px;cursor:pointer;background:var(--sup);color:var(--ink);white-space:nowrap}
+.btn-m:hover{border-color:var(--azul);color:var(--azul)}
+.inp{font:400 13.5px Montserrat,sans-serif;color:var(--ink);background:var(--sup);border:1px solid var(--linha);border-radius:10px;padding:10px 12px}
+.inp:focus-visible{outline:2px solid var(--azul);outline-offset:1px}

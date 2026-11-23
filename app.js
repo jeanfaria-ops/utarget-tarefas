@@ -163,7 +163,7 @@ function casca() {
         ${[["auto", "Auto"], ["light", "Claro"], ["dark", "Escuro"]].map(([k, n]) => `<button data-t="${k}" aria-pressed="${tema === k}">${n}</button>`).join("")}
       </div>
       <div class="eu"><div class="av">${esc(ini(st.eu.nome))}</div>
-        <div><div class="n">${esc(curto(st.eu.nome))}</div><div class="p">${esc({ admin: "Administrador", lider: "Líder", operador: "Operador", terceirizado: "Terceirizado", comercial: "Comercial" }[st.eu.papel] || st.eu.papel)}</div></div>
+        <div><div class="n">${esc(curto(st.eu.nome))}</div><div class="p">${esc({ admin: "Administrador", lider: "Líder", operador: "Operador", terceirizado: "Terceirizado", comercial: "Comercial", cliente: "Cliente" }[st.eu.papel] || st.eu.papel)}</div></div>
         <button id="sair" title="Sair" aria-label="Sair">${I.sair}</button></div>
     </aside>
     <div class="main">
@@ -914,6 +914,7 @@ async function iniciar() {
   st.eu = data[0];
   const mm = await sb.rpc("app_meus_modulos");
   st.mods = mm.data || [];
+  if (st.eu.papel === "cliente") { st.view = "portal"; casca(); renderView(); return; }
   if (!st.escopo) st.escopo = gestor() ? "equipe" : "minhas";
   if (st.view === "entrada" && !gestor()) st.view = "inicio";
   casca(); renderView();

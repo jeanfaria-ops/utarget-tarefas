@@ -318,6 +318,7 @@ async function telaLegalizacao() {
   carregandoView();
   let d; try { d = await rpcMod("app_mod_legalizacao"); } catch (e) { return erroView(e); }
   const aba = st.abaLeg || (st.abaLeg = "cert");
+  let envios = []; try { envios = (await rpcMod("app_portal_envios", {}, aba === "env")) || []; } catch { envios = []; }
   const cv = d.certificacoes.filter((c) => ["vencido", "critico"].includes(c.semaforo));
   const mv = d.mandatos.filter((m) => ["vencido", "vence_90d", "em_disputa"].includes(m.situacao));
   const ce = d.certidoes.filter((c) => c.consta > 0);
@@ -334,6 +335,10 @@ async function telaLegalizacao() {
       d.divergencias.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.sigla)}</td><td>${esc(x.campo)}</td><td>${esc(x.valor_banco || "")}</td><td>${esc(x.valor_origem || "")}</td><td class="n">${dmy(String(x.detectado_em).slice(0, 10))}</td></tr>`), "Nenhuma divergência aberta."),
     fila: () => tabela([["Entidade"], ["Certidão"], ["Titular"], ["Motivo"], ["Portal"]],
       d.fila.map((f) => `<tr style="cursor:default"><td class="forte">${esc(f.sigla)}</td><td>${esc(f.tipo)}</td><td>${esc(f.nome || "")}</td><td style="font-size:12.5px">${esc(f.motivo || "")}</td><td>${f.portal_url ? `<a class="link" target="_blank" rel="noopener" href="${esc(f.portal_url)}">abrir</a>` : ""}</td></tr>`), "Fila de emissão vazia."),
+    env: () => tabela([["Entidade"], ["Tipo"], ["Arquivo"], ["Leitura automática"], ["Enviado por"], ["", "n"]],
+      envios.map((v) => { const dd = v.dados || {}; const chk = dd.cnpj_confere === false ? `<span class="pill atr">CNPJ difere</span> ` : dd.cnpj_confere ? `<span class="pill ok">CNPJ confere</span> ` : "";
+        return `<tr style="cursor:default"><td class="forte">${esc(v.sigla)}</td><td>${rotulo(v.tipo)}${dd.tipo_codigo ? `<div style="font-size:11.5px;color:var(--ink3)">${esc(dd.tipo_codigo)}</div>` : ""}</td><td style="font-size:12.5px">${esc(v.nome_arquivo)}<div style="font-size:11px;color:var(--ink3)">${quando(v.criado_em)}</div></td><td style="font-size:12px">${chk}${dd.validade ? `validade ${dmy(dd.validade)}` : ""}${dd.resumo ? `<div style="color:var(--ink3);max-width:260px">${esc(String(dd.resumo).slice(0, 140))}</div>` : ""}</td><td style="font-size:12px">${esc(v.enviado_por)}</td><td class="n" style="white-space:nowrap"><button class="btn-m" data-vpe="${v.id}">Ver arquivo</button> <button class="btn-m" data-ape="${v.id}">Aceitar</button> <button class="btn-m" data-rpe="${v.id}">Recusar</button></td></tr>`; }),
+      "Nenhum envio do portal aguardando conferência."),
   };
   $("#view").innerHTML = `
     <div class="kpis k4">
@@ -345,9 +350,20 @@ async function telaLegalizacao() {
     <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Calendário de vencimentos</h2><p>Certificações e mandatos de diretoria por mês de vencimento, nos próximos 12 meses.</p></div></div>
       ${legenda([["Certificação", "var(--s1)"], ["Mandato", "var(--s2)"]])}${vizColunas(calLeg(d), ["Certificação", "Mandato"], { "Certificação": "var(--s1)", "Mandato": "var(--s2)" }, { destaque: "Vencidos" })}</section>
     <div class="card"><div class="sec-h"><div><h2>${{ cert: "Certificações", mand: "Mandatos de diretoria", cdao: "Certidões por entidade", bloq: "Bloqueios e divergências", fila: "Fila de emissão de certidões" }[aba]}</h2><p>Ordenado pelo que vence primeiro. Clique na linha para abrir a ficha.</p></div>
-      ${segV("leg", [["cert", "Certificações"], ["mand", "Mandatos"], ["cdao", "Certidões"], ["bloq", "Bloqueios"], ["fila", `Fila (${d.fila.length})`]], aba)}</div>${corpo[aba]()}</div>
+      ${segV("leg", [["cert", "Certificações"], ["mand", "Mandatos"], ["cdao", "Certidões"], ["bloq", "Bloqueios"], ["fila", `Fila (${d.fila.length})`], ["env", `Portal (${envios.length})`]], aba)}</div>${corpo[aba]()}</div>
     ${linhaAgora(cv.length || mv.length ? `Renovar as <b>${cv.length}</b> certificações vencidas ou críticas e regularizar os <b>${mv.length}</b> mandatos em alerta — cada caso está na aba correspondente.` : "Certificações e mandatos em dia.")}`;
   $$("[data-seg=leg]").forEach((b) => (b.onclick = () => { st.abaLeg = b.dataset.k; telaLegalizacao(); }));
+  $$("[data-vpe]").forEach((b) => (b.onclick = async () => { const v = envios.find((x) => x.id === b.dataset.vpe); const { data } = await sb.storage.from("portal").createSignedUrl(v.storage_path, 600); if (data?.signedUrl) window.open(data.signedUrl, "_blank"); }));
+  const decidirEnvio = async (id, acao) => {
+    const quem = st.eu?.nome || "";
+    let motivo = null;
+    if (acao === "recusar") { motivo = prompt("Motivo da recusa (o cliente vai ler):"); if (!motivo || motivo.trim().length < 5) return; }
+    const { error } = await sb.rpc("app_portal_envio_decidir", { p_id: id, p_acao: acao, p_motivo: motivo, p_quem: quem });
+    if (error) return alert("Falhou: " + error.message);
+    limpaCacheMod(); telaLegalizacao();
+  };
+  $$("[data-ape]").forEach((b) => (b.onclick = () => decidirEnvio(b.dataset.ape, "aceitar")));
+  $$("[data-rpe]").forEach((b) => (b.onclick = () => decidirEnvio(b.dataset.rpe, "recusar")));
   ligaIr($("#view"));
   ligaTips($("#view"));
 }
@@ -955,6 +971,7 @@ function topN(l, chave, n) { const m = new Map(); l.forEach((t) => { const k = c
 function resumo(l, chave) { return topN(l, chave, 4).map((o) => `${o.k}${o.n > 1 ? " (" + o.n + ")" : ""}`).join(" · ") + (new Set(l.map(chave)).size > 4 ? " …" : ""); }
 
 function navItens() {
+  if (st.eu?.papel === "cliente") return [["portal", "Minha entidade", I.carteira]];
   const it = [["inicio", "Início", I.inicio]];
   // Por ora o G-Click segue como motor de execução: a área de tarefas é a central de prazos (espelho, só leitura).
   // As telas do motor próprio (Tarefas, Entrada, Modelos) voltam quando a migração do G-Click for decidida.
@@ -963,9 +980,153 @@ function navItens() {
   return it;
 }
 
+// ---------------------------------------------------------------- Portal do cliente (visão da OSC) · 23/11/2026
+// A OSC loga por e-mail, vê a própria situação, resolve pendência com arquivo (fica em conferência até a equipe aceitar),
+// acompanha tarefas cliente↔Utarget e as janelas de captação com encaixe (Conecta). O G-Click segue interno.
+const PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const _scripts = {};
+const carregaScript = (src) => (_scripts[src] ||= new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => { delete _scripts[src]; ko(new Error("não carregou " + src)); }; document.head.appendChild(s); }));
+async function pdfTexto(buf) {
+  await carregaScript(PDFJS_CDN);
+  const lib = window.pdfjsLib; lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  const pdf = await lib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
+  let t = "";
+  for (let i = 1; i <= Math.min(pdf.numPages, 12) && t.length < 40000; i++) { const pg = await pdf.getPage(i); const c = await pg.getTextContent(); t += "\n" + c.items.map((x) => x.str).join(" "); }
+  return t;
+}
+const soDig = (s) => String(s || "").replace(/\D/g, "");
+const dataBR = (m) => (m ? m[1].split("/").reverse().join("-") : null);
+async function sha256Arq(file) { const h = await crypto.subtle.digest("SHA-256", await file.arrayBuffer()); return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join(""); }
+
+function gavetaEnvio(ctx, aoConcluir) {
+  // ctx: { tipo, titulo, contexto, ent {id,sigla,cnpj}, tipo_codigo?, alvo_tipo?, alvo_id? }
+  const g = gaveta(`<div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Enviar documento</div><h3>${esc(ctx.titulo)}</h3></div>
+    <div class="gb">
+      ${ctx.contexto ? `<p style="font-size:13px;color:var(--ink2);margin:0 0 12px">${esc(ctx.contexto)}</p>` : ""}
+      <label class="pt-drop" tabindex="0"><b>Escolher o arquivo</b><span>PDF, foto ou imagem · até 10 MB · a leitura acontece no seu navegador</span><input type="file" hidden accept=".pdf,image/*"></label>
+      <div data-pe></div>
+    </div>`);
+  const drop = g.querySelector(".pt-drop"), fi = g.querySelector("input[type=file]"), out = g.querySelector("[data-pe]");
+  drop.onclick = () => fi.click();
+  drop.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fi.click(); } };
+  fi.onchange = async () => {
+    const f = fi.files[0]; if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { out.innerHTML = `<div class="pt-alerta atr">Arquivo acima de 10 MB. Envie só as páginas necessárias.</div>`; return; }
+    out.innerHTML = `<div style="font-size:13px;color:var(--ink2);margin-top:12px">Lendo ${esc(f.name)}…</div>`;
+    const dados = { descricao: `${rotulo(ctx.tipo)} — ${ctx.ent.sigla} (${f.name}, portal do cliente)` };
+    if (ctx.tipo_codigo) dados.tipo_codigo = ctx.tipo_codigo;
+    const avisos = [];
+    if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+      try {
+        const txt = await pdfTexto(await f.arrayBuffer());
+        const dig = soDig(txt);
+        if (ctx.ent.cnpj) { dados.cnpj_confere = dig.includes(soDig(ctx.ent.cnpj)); if (!dados.cnpj_confere) avisos.push(`O documento não traz o CNPJ de ${ctx.ent.sigla}. Confira se é o arquivo certo antes de enviar.`); }
+        const val = dataBR(txt.match(/Validade\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i)) || dataBR(txt.match(/v[áa]lid[ao]\s+at[ée]\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i));
+        const emi = dataBR(txt.match(/Expedi[çc][ãa]o\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i)) || dataBR(txt.match(/[Ee]mitida\s+em[^0-9]{0,20}(\d{2}\/\d{2}\/\d{4})/));
+        if (val) dados.validade = val;
+        if (emi) dados.emissao = emi;
+        if (val && val < new Date().toISOString().slice(0, 10)) avisos.push(`O documento aparenta estar vencido (${dmy(val)}).`);
+        dados.resumo = txt.replace(/\s+/g, " ").trim().slice(0, 300);
+      } catch { avisos.push("Não consegui ler o conteúdo do PDF; a equipe confere manualmente."); }
+    }
+    out.innerHTML = `
+      <div style="margin-top:12px;font-size:13px"><b>${esc(f.name)}</b> <span style="color:var(--ink3)">${(f.size / 1024).toFixed(0)} KB</span></div>
+      ${dados.validade || dados.cnpj_confere != null ? `<div style="font-size:12.5px;color:var(--ink2);margin-top:6px">${dados.cnpj_confere === true ? "CNPJ confere · " : ""}${dados.validade ? "validade " + dmy(dados.validade) : ""}</div>` : ""}
+      ${avisos.map((a) => `<div class="pt-alerta">${esc(a)}</div>`).join("")}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn-m" data-tr>Trocar arquivo</button><button class="btn-p" data-env>Enviar para a Utarget</button></div><div data-er></div>`;
+    out.querySelector("[data-tr]").onclick = () => fi.click();
+    out.querySelector("[data-env]").onclick = async (e) => {
+      e.target.disabled = true;
+      const er = out.querySelector("[data-er]");
+      er.innerHTML = `<div style="font-size:13px;color:var(--ink2);margin-top:10px">Enviando…</div>`;
+      try {
+        const sha = await sha256Arq(f);
+        const limpo = f.name.replace(/[^\w.\-]+/g, "_").slice(-80);
+        const path = `${ctx.ent.id}/${new Date().toISOString().slice(0, 10)}_${ctx.tipo}_${Date.now().toString(36)}_${limpo}`;
+        const up = await sb.storage.from("portal").upload(path, f, { contentType: f.type || "application/octet-stream" });
+        if (up.error) throw up.error;
+        const { error } = await sb.rpc("app_cli_envio_registrar", { p_tipo: ctx.tipo, p_alvo_tipo: ctx.alvo_tipo || null, p_alvo_id: ctx.alvo_id || null, p_storage_path: path, p_nome: f.name, p_sha256: sha, p_dados: dados });
+        if (error) throw error;
+        er.innerHTML = `<div class="pt-alerta ok">Recebido. A equipe da Utarget confere e você acompanha o andamento aqui no portal.</div>`;
+        setTimeout(() => { fecharGaveta(); limpaCacheMod(); if (aoConcluir) aoConcluir(); }, 1600);
+      } catch (err) { e.target.disabled = false; er.innerHTML = `<div class="pt-alerta atr">Não foi possível enviar: ${esc(err.message || err)}</div>`; }
+    };
+  };
+}
+
+async function telaPortal() {
+  carregandoView();
+  let d; try { d = await rpcMod("app_cli_painel"); } catch (e) { return erroView(e); }
+  if (!d || !d.ent) return erroView(new Error("Seu acesso ainda não está ligado a uma entidade. Fale com a Utarget pelo WhatsApp (11) 2642-8636."));
+  cabecalho(d.ent.sigla, d.ent.razao);
+  const BLOQ_TIPO = { mandato_vencido: "ata", mandato_nao_comprovado: "ata", mandato_em_disputa: "ata", certificacao_ausente: "certificacao", divida_ativa: "certidao", omissao_receita: "certidao", parcelamento: "certidao" };
+  const BLOQ_TXT = { ata: "Envie a ata registrada da eleição da diretoria.", certificacao: "Envie o certificado ou o protocolo da inscrição.", certidao: "Envie a certidão que regulariza (negativa ou com efeito de negativa).", documento: "Envie o documento que regulariza." };
+  const minhas = d.tarefas.filter((t) => t.lado === "cliente" && t.status === "aberta");
+  const daUt = d.tarefas.filter((t) => t.lado === "utarget" && t.status === "aberta");
+  const emConf = d.envios.filter((v) => v.status === "em_conferencia").length;
+  const pend = d.bloqueios.length + d.certidao_fila.length + minhas.length;
+  const certAlerta = d.certificacoes.filter((c) => ["vencido", "critico", "atencao"].includes(c.semaforo));
+  const conAbertas = d.conecta.filter((c) => c.encaixe !== "bloqueado");
+  $("#view").innerHTML = `
+    <div class="kpis k4">
+      ${kpiM("Pendências com você", pend, pend ? "resolva enviando o documento" : "nada pendente", pend ? "risco" : "ok")}
+      ${kpiM("Com a Utarget", daUt.length + emConf, "pedidos e envios em conferência", "neu")}
+      ${kpiM("Certificações em alerta", certAlerta.length, `de ${d.certificacoes.length} acompanhadas`, certAlerta.length ? "risco" : "ok")}
+      ${kpiM("Oportunidades de captação", conAbertas.length, "janelas com encaixe da sua OSC", conAbertas.length ? "ok" : "neu")}
+    </div>
+
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>O que precisamos de você</h2><p>Enviou, a Utarget confere e a pendência some daqui.</p></div></div>
+      ${pend ? `<div class="pt-lista">` +
+        d.bloqueios.map((b) => { const t = BLOQ_TIPO[b.motivo] || "documento"; return `<div class="pt-item"><div><b>${rotulo(b.motivo)}</b>${d.grupo.length > 1 ? ` · ${esc(b.sigla)}` : ""}<div class="pt-sub">${esc(b.detalhe || BLOQ_TXT[t])} · pendente desde ${dmy(b.desde)}</div></div><button class="btn-p" data-envb="${b.id}" data-t="${t}">Enviar documento</button></div>`; }).join("") +
+        d.certidao_fila.map((f, i) => `<div class="pt-item"><div><b>Certidão ${esc(f.tipo)}</b>${d.grupo.length > 1 ? ` · ${esc(f.sigla)}` : ""}<div class="pt-sub">${esc(f.nome || "")} · ${humano(f.motivo || "")}${f.portal_url ? ` · <a class="link" target="_blank" rel="noopener" href="${esc(f.portal_url)}">emitir no portal do órgão</a>` : ""}</div></div><button class="btn-p" data-envf="${i}">Enviar certidão</button></div>`).join("") +
+        minhas.map((t) => `<div class="pt-item"><div><b>${esc(t.titulo)}</b><div class="pt-sub">${esc(t.detalhe || "")}${t.prazo ? " · prazo " + dmy(t.prazo) : ""}</div></div><span style="display:flex;gap:6px"><button class="btn-m" data-envt="${t.id}">Enviar arquivo</button><button class="btn-m" data-ft="${t.id}">Concluir</button></span></div>`).join("") +
+        `</div>` : `<div class="vazio-g">Nenhuma pendência com você. Tudo em dia.</div>`}
+    </section>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:16px">
+      <section class="card"><div class="sec-h"><div><h2>Situação da entidade</h2><p>Mandato, certificações e certidões que a Utarget acompanha.</p></div></div>
+        ${d.mandato ? `<div class="pt-item" style="border:0;padding:6px 4px"><div><b>Mandato da diretoria</b><div class="pt-sub">fim ${dmy(d.mandato.fim)}</div></div>${pillSem(d.mandato.situacao)}</div>` : ""}
+        ${tabela([["Certificação"], ["Validade", "n"], ["Situação"]], d.certificacoes.map((c) => `<tr style="cursor:default"><td><div class="forte" style="font-size:12.5px">${esc(c.tipo)}</div>${c.numero ? `<div style="font-size:11px;color:var(--ink3)">${esc(c.numero)}</div>` : ""}</td><td class="n">${dmy(c.validade)}</td><td>${pillSem(c.semaforo)}</td></tr>`), "Nenhuma certificação registrada.")}
+        ${d.certidoes.length ? `<h4 style="margin:14px 4px 8px;font-size:13px">Certidões</h4>` + tabela([["Certidão"], ["Verificada", "n"], ["Situação"]], d.certidoes.map((c) => `<tr style="cursor:default"><td style="font-size:12.5px">${esc(c.tipo)}<div style="font-size:11px;color:var(--ink3)">${esc(c.orgao_emissor || "")}</div></td><td class="n">${dmy(c.verificado_em)}</td><td>${pillSem(c.semaforo)}</td></tr>`)) : ""}
+      </section>
+      <section class="card"><div class="sec-h"><div><h2>Tarefas com a Utarget</h2><p>O que você pediu e o que está em andamento.</p></div><button class="btn-m" id="pt-nova">Pedir algo</button></div>
+        ${tabela([["Pedido"], ["Desde", "n"], ["Status"]], daUt.map((t) => `<tr style="cursor:default"><td style="font-size:12.5px"><b>${esc(t.titulo)}</b>${t.detalhe ? `<div style="color:var(--ink3);font-size:11.5px">${esc(t.detalhe)}</div>` : ""}</td><td class="n">${dmy(String(t.criado_em).slice(0, 10))}</td><td><span class="pill neu">Em andamento</span></td></tr>`), "Nenhum pedido em aberto.")}
+        ${d.envios.length ? `<h4 style="margin:14px 4px 8px;font-size:13px">Seus envios</h4>` + tabela([["Arquivo"], ["Enviado", "n"], ["Status"]], d.envios.map((v) => `<tr style="cursor:default"><td style="font-size:12px">${esc(v.nome_arquivo)}</td><td class="n">${quando(v.criado_em)}</td><td>${v.status === "aceito" ? '<span class="pill ok">Aceito</span>' : v.status === "recusado" ? `<span class="pill atr" data-tip="${esc(v.motivo_recusa || "")}">Recusado</span>` : '<span class="pill risco">Em conferência</span>'}</td></tr>`)) : ""}
+      </section>
+    </div>
+
+    <section class="card"><div class="sec-h"><div><h2>Captação · oportunidades para a sua OSC</h2><p>Janelas de edital e financiadores com encaixe no seu perfil, do radar da Utarget.</p></div></div>
+      ${tabela([["Fecha", "n"], ["Oportunidade"], ["Encaixe"], ["O que falta"]], d.conecta.map((c) => `<tr style="cursor:default"><td class="n">${c.fecha ? dmy(c.fecha) + (c.dias != null ? ` <span style="color:var(--ink3);font-size:11px">${c.dias} d</span>` : "") : "—"}</td><td style="font-size:12.5px">${c.url ? `<a class="link" target="_blank" rel="noopener" href="${esc(c.url)}">${esc(c.titulo)}</a>` : esc(c.titulo)}</td><td>${pillSem(c.encaixe === "alto" ? "ok" : c.encaixe === "bloqueado" ? "vencido" : "atencao", rotulo(c.encaixe))}</td><td style="font-size:12px;color:var(--ink2)">${esc(c.motivo || (c.encaixe === "alto" ? "Perfil atende; fale com a Utarget para propor." : ""))}</td></tr>`), "Nenhuma janela aberta com encaixe agora. O radar roda duas vezes por semana.")}
+      ${linhaAgora(pend ? `Resolver as <b>${pend}</b> pendências acima destrava projetos e certidões — comece pela mais antiga.` : conAbertas.length ? `Há <b>${conAbertas.length}</b> janela${conAbertas.length > 1 ? "s" : ""} de captação com encaixe: fale com a Utarget pelo WhatsApp (11) 2642-8636 para avaliar a proposta.` : "Tudo em dia. Qualquer novidade aparece aqui e avisamos você.")}
+    </section>`;
+  const entDe = (id) => d.grupo.find((x) => x.id === id) || d.ent;
+  $$("[data-envb]").forEach((b) => (b.onclick = () => { const bl = d.bloqueios.find((x) => x.id === b.dataset.envb); const e = d.grupo.find((x) => x.sigla === bl.sigla) || d.ent; gavetaEnvio({ tipo: b.dataset.t, titulo: rotulo(bl.motivo) + " · " + bl.sigla, contexto: bl.detalhe || "", ent: e, alvo_tipo: "bloqueio", alvo_id: bl.id }, telaPortal); }));
+  $$("[data-envf]").forEach((b) => (b.onclick = () => { const f = d.certidao_fila[+b.dataset.envf]; gavetaEnvio({ tipo: "certidao", titulo: `Certidão ${f.tipo} · ${f.sigla}`, contexto: f.nome || "", ent: entDe(f.entidade_id), tipo_codigo: f.tipo, alvo_tipo: "certidao_fila", alvo_id: f.tipo }, telaPortal); }));
+  $$("[data-envt]").forEach((b) => (b.onclick = () => { const t = d.tarefas.find((x) => x.id === b.dataset.envt); gavetaEnvio({ tipo: "tarefa", titulo: t.titulo, contexto: t.detalhe || "", ent: entDe(t.entidade_id), alvo_tipo: "portal_tarefa", alvo_id: t.id }, telaPortal); }));
+  $$("[data-ft]").forEach((b) => (b.onclick = async () => { if (!confirm("Marcar como concluída?")) return; const { error } = await sb.rpc("app_cli_tarefa_feita", { p_id: b.dataset.ft }); if (error) return alert(error.message); limpaCacheMod(); telaPortal(); }));
+  const nv = $("#pt-nova");
+  if (nv) nv.onclick = () => {
+    const g = gaveta(`<div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Pedido à Utarget</div><h3>O que você precisa?</h3></div>
+      <div class="gb"><input id="pt-tt" class="inp" style="width:100%" maxlength="200" placeholder="Ex.: segunda via do balanço de 2025">
+      <textarea id="pt-dt" class="inp" style="width:100%;min-height:90px;margin-top:10px" maxlength="2000" placeholder="Detalhe o que precisa (opcional)"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn-p" id="pt-ok">Enviar pedido</button></div><div data-er></div></div>`);
+    g.querySelector("#pt-ok").onclick = async (e) => {
+      const tt = g.querySelector("#pt-tt").value.trim();
+      if (!tt) return;
+      e.target.disabled = true;
+      const { error } = await sb.rpc("app_cli_tarefa_criar", { p_titulo: tt, p_detalhe: g.querySelector("#pt-dt").value.trim() });
+      if (error) { e.target.disabled = false; g.querySelector("[data-er]").innerHTML = `<div class="pt-alerta atr">${esc(error.message)}</div>`; return; }
+      fecharGaveta(); limpaCacheMod(); telaPortal();
+    };
+    g.querySelector("#pt-tt").focus();
+  };
+  ligaTips($("#view"));
+}
+
 Object.assign(MODS, {
   inicio: telaInicio, gclick: telaGclick, carteira: telaCarteira, legalizacao: telaLegalizacao, captacao: telaCaptacao, comercial: telaComercial,
-  atendimento: telaAtendimento, financeiro: telaFinanceiro, margem: telaMargem, acessos: telaAcessos,
+  atendimento: telaAtendimento, financeiro: telaFinanceiro, margem: telaMargem, acessos: telaAcessos, portal: telaPortal,
 });
 
 iniciar();
