@@ -205,7 +205,7 @@ function irPara(v, filtros) {
 function cascaCliente() {
   const demo = st.eu?.papel !== "cliente";
   const tema = ls.get("tema", "auto");
-  const itens = [["topo", "Início", I.inicio], ["pt-prz", "Prazos", I.painel || I.lista], ["pt-pend", "Pendências", I.legalizacao || I.lista], ["pt-tar", "Tarefas", I.lista], ["pt-cap", "Captação", I.captacao || I.lista]];
+  const itens = [["topo", "Início", I.inicio], ["pt-prz", "Prazos", I.painel || I.lista], ["pt-pend", "Pendências", I.legalizacao || I.lista], ["pt-tar", "Tarefas", I.lista], ["pt-fin", "Financeiro", I.financeiro || I.lista], ["pt-cap", "Captação", I.captacao || I.lista]];
   app.innerHTML = `
   <div class="shell">
     <aside class="side">

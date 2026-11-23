@@ -1060,7 +1060,7 @@ async function telaPortal() {
   carregandoView();
   const prev = st.eu?.papel !== "cliente" ? st.portalPrev : null;
   if (st.eu?.papel !== "cliente" && !prev) return erroView(new Error("Escolha uma entidade na Carteira e use \"Ver como o cliente\" na ficha."));
-  let d; try { d = await rpcMod("app_cli_painel", prev ? { p_entidade: prev.id } : {}); } catch (e) { return erroView(e); }
+  let d, fin; try { [d, fin] = await Promise.all([rpcMod("app_cli_painel", prev ? { p_entidade: prev.id } : {}), rpcMod("app_cli_fin", prev ? { p_entidade: prev.id } : {}).catch(() => null)]); } catch (e) { return erroView(e); }
   if (!d || !d.ent) return erroView(new Error(prev ? "Entidade não encontrada." : "Seu acesso ainda não está ligado a uma entidade. Fale com a Utarget pelo WhatsApp (11) 2642-8636."));
   cabecalho(d.ent.sigla, d.ent.razao);
   const agir = (fn) => (d.preview ? () => alert("Visão de demonstração: esta ação é feita pelo cliente, logado no portal.") : fn);
@@ -1101,11 +1101,55 @@ async function telaPortal() {
       </section>
     </div>
 
+    ${(() => {
+      const dem = (fin && fin.dem && fin.dem[0]) || null, docs = (fin && fin.docs) || [];
+      if (!dem && !docs.length && !d.preview) return "";
+      const kb = (b) => (b == null ? "" : b > 1048576 ? (b / 1048576).toFixed(1).replace(".", ",") + " MB" : Math.round(b / 1024) + " KB");
+      const barras = (its, tot, cor) => its.map((x) => `<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12.5px;padding:3px 0"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.rot)}</span><b style="white-space:nowrap">${brl(x.v)}</b><span style="grid-column:1/-1;height:6px;background:var(--fundo);border-radius:3px;overflow:hidden"><i style="display:block;height:100%;width:${Math.max(2, Math.round((x.v * 100) / (tot || 1)))}%;background:${cor};border-radius:3px"></i></span></div>`).join("");
+      let fe = "";
+      if (dem) { const r = dem.dados.dre || {}, b = dem.dados.bp || {};
+        fe = `<div class="kpis k4" style="margin-bottom:14px">
+          ${kpiM("Receitas " + dem.exercicio, brl(r.receitas_total), "subvenções e doações do exercício", "ok")}
+          ${kpiM("Despesas " + dem.exercicio, brl(r.despesas_total), "custos das atividades", "neu")}
+          ${kpiM("Resultado do exercício", brl(r.resultado_exercicio), r.resultado_exercicio < 0 ? "déficit" : "superávit", r.resultado_exercicio < 0 ? "atr" : "ok")}
+          ${kpiM("Patrimônio social", brl(b.patrimonio_social), b.patrimonio_social < 0 ? "negativo (déficits acumulados)" : "acumulado", b.patrimonio_social < 0 ? "atr" : "ok")}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px">
+          <div><h4 style="margin:0 0 6px;font-size:13px">De onde veio (receitas)</h4>${barras(r.receitas || [], r.receitas_total, "var(--azul)")}</div>
+          <div><h4 style="margin:0 0 6px;font-size:13px">Para onde foi (despesas)</h4>${barras((r.despesas || []).slice(0, 6), r.despesas_total, "var(--laranja, #FF9100)")}</div>
+        </div>
+        ${r.multas_e_juros ? `<div class="pt-alerta" style="margin-top:12px">Multas e juros consumiram <b>${brl(r.multas_e_juros)}</b> no exercício — dinheiro que não chegou na atividade.</div>` : ""}
+        <p style="font-size:11.5px;color:var(--ink3);margin:10px 4px 0">${esc(dem.dados.obs || "")} Fonte: ${esc(dem.fonte || "")}.</p>`;
+      }
+      const dl = docs.length ? `<h4 style="margin:16px 4px 8px;font-size:13px">Documentos</h4>` + tabela([["Documento"], ["Tamanho", "n"], ["", "n"]], docs.map((x, i) => `<tr style="cursor:default"><td style="font-size:12.5px">${esc(x.nome)}</td><td class="n" style="font-size:12px">${kb(x.bytes)}</td><td class="n"><button class="btn-m" data-dlt="${i}">Baixar</button></td></tr>`)) : (dem ? "" : `<div class="vazio-g">Os documentos do exercício aparecem aqui assim que a Utarget publicar.</div>`);
+      const up = d.preview ? `<div style="margin-top:14px;border-top:1px dashed var(--linha);padding-top:12px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:13px">Equipe · publicar documento</b><input id="pt-fex" class="inp" type="number" value="2025" style="width:90px" aria-label="Exercício"><button class="btn-m" id="pt-fup">Escolher PDFs…</button><input id="pt-ffile" type="file" hidden accept=".pdf" multiple><span id="pt-fmsg" style="font-size:12px;color:var(--ink3)"></span></div></div>` : "";
+      return `<section class="card" id="pt-fin" style="margin-bottom:16px;scroll-margin-top:90px"><div class="sec-h"><div><h2>Financeiro e transparência</h2><p>Demonstrações contábeis da entidade, no padrão ITG 2002, assinadas pela contadora responsável.</p></div></div>${fe}${dl}${up}</section>`;
+    })()}
     <section class="card" id="pt-cap" style="scroll-margin-top:90px"><div class="sec-h"><div><h2>Captação · oportunidades para a sua OSC</h2><p>Janelas de edital e financiadores com encaixe no seu perfil, do radar da Utarget.</p></div></div>
       ${tabela([["Fecha", "n"], ["Oportunidade"], ["Encaixe"], ["O que falta"]], d.conecta.map((c) => `<tr style="cursor:default"><td class="n">${c.fecha ? dmy(c.fecha) + (c.dias != null ? ` <span style="color:var(--ink3);font-size:11px">${c.dias} d</span>` : "") : "—"}</td><td style="font-size:12.5px">${c.url ? `<a class="link" target="_blank" rel="noopener" href="${esc(c.url)}">${esc(c.titulo)}</a>` : esc(c.titulo)}</td><td>${pillSem(c.encaixe === "alto" ? "ok" : c.encaixe === "bloqueado" ? "vencido" : "atencao", rotulo(c.encaixe))}</td><td style="font-size:12px;color:var(--ink2)">${esc(c.motivo || (c.encaixe === "alto" ? "Perfil atende; fale com a Utarget para propor." : ""))}</td></tr>`), d.perfil_pronto ? "Nenhuma janela aberta com encaixe agora. O radar roda duas vezes por semana." : "A Utarget está completando o perfil de captação da sua OSC; as oportunidades com encaixe aparecem aqui assim que ele estiver pronto.")}
       ${linhaAgora(pend ? `Resolver as <b>${pend}</b> pendências acima destrava projetos e certidões — comece pela mais antiga.` : conAbertas.length ? `Há <b>${conAbertas.length}</b> janela${conAbertas.length > 1 ? "s" : ""} de captação com encaixe: fale com a Utarget pelo WhatsApp (11) 2642-8636 para avaliar a proposta.` : "Tudo em dia. Qualquer novidade aparece aqui e avisamos você.")}
     </section>`;
   const entDe = (id) => d.grupo.find((x) => x.id === id) || d.ent;
+  const finDocs = (fin && fin.docs) || [];
+  $$("[data-dlt]").forEach((b) => (b.onclick = async () => { const x = finDocs[+b.dataset.dlt]; const { data, error } = await sb.storage.from("portal").createSignedUrl(x.path, 600); if (error || !data?.signedUrl) return alert("Não foi possível abrir: " + (error?.message || "")); window.open(data.signedUrl, "_blank"); }));
+  const fup = $("#pt-fup");
+  if (fup) { const fi = $("#pt-ffile"), msg = $("#pt-fmsg");
+    fup.onclick = () => fi.click();
+    fi.onchange = async () => {
+      const ex = ($("#pt-fex").value || "").trim() || "geral";
+      const files = [...fi.files]; if (!files.length) return;
+      fup.disabled = true; let ok = 0;
+      for (const f of files) {
+        msg.textContent = `Enviando ${f.name}…`;
+        const limpo = f.name.replace(/[^\w.\- ()]+/g, "_");
+        const { error } = await sb.storage.from("portal").upload(`transparencia/${d.ent.id}/${ex} — ${limpo}`, f, { contentType: "application/pdf", upsert: true });
+        if (error) { msg.textContent = `Falhou em ${f.name}: ${error.message}`; fup.disabled = false; return; }
+        ok++;
+      }
+      msg.textContent = `${ok} documento${ok > 1 ? "s" : ""} publicado${ok > 1 ? "s" : ""}.`;
+      limpaCacheMod(); setTimeout(telaPortal, 900);
+    };
+  }
   $$("[data-envb]").forEach((b) => (b.onclick = agir(() => { const bl = d.bloqueios.find((x) => x.id === b.dataset.envb); const e = d.grupo.find((x) => x.sigla === bl.sigla) || d.ent; gavetaEnvio({ tipo: b.dataset.t, titulo: rotulo(bl.motivo) + " · " + bl.sigla, contexto: bl.detalhe || "", ent: e, alvo_tipo: "bloqueio", alvo_id: bl.id }, telaPortal); })));
   $$("[data-envf]").forEach((b) => (b.onclick = agir(() => { const f = d.certidao_fila[+b.dataset.envf]; gavetaEnvio({ tipo: "certidao", titulo: `Certidão ${f.tipo} · ${f.sigla}`, contexto: f.nome || "", ent: entDe(f.entidade_id), tipo_codigo: f.tipo, alvo_tipo: "certidao_fila", alvo_id: f.tipo }, telaPortal); })));
   $$("[data-envt]").forEach((b) => (b.onclick = agir(() => { const t = d.tarefas.find((x) => x.id === b.dataset.envt); gavetaEnvio({ tipo: "tarefa", titulo: t.titulo, contexto: t.detalhe || "", ent: entDe(t.entidade_id), alvo_tipo: "portal_tarefa", alvo_id: t.id }, telaPortal); })));
