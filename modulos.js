@@ -1111,7 +1111,7 @@ async function telaPortal() {
   $$("[data-envt]").forEach((b) => (b.onclick = agir(() => { const t = d.tarefas.find((x) => x.id === b.dataset.envt); gavetaEnvio({ tipo: "tarefa", titulo: t.titulo, contexto: t.detalhe || "", ent: entDe(t.entidade_id), alvo_tipo: "portal_tarefa", alvo_id: t.id }, telaPortal); })));
   $$("[data-ft]").forEach((b) => (b.onclick = agir(async () => { if (!confirm("Marcar como concluída?")) return; const { error } = await sb.rpc("app_cli_tarefa_feita", { p_id: b.dataset.ft }); if (error) return alert(error.message); limpaCacheMod(); telaPortal(); })));
   const sair = $("#pt-sair");
-  if (sair) sair.onclick = () => { st.portalPrev = null; irPara("carteira"); };
+  if (sair) sair.onclick = () => { try { history.replaceState(null, "", location.pathname + location.search); } catch {} window.close(); if (!window.closed) { st.portalPrev = null; irPara("carteira"); } };
   const nv = $("#pt-nova");
   if (nv) nv.onclick = agir(() => {
     const g = gaveta(`<div class="gh"><button class="ib gx" aria-label="Fechar">${I.x}</button><div class="ey">Pedido à Utarget</div><h3>O que você precisa?</h3></div>
