@@ -288,7 +288,7 @@ async function fichaEntidade(id) {
     <div class="gc">${esc(e.razao_social || "")}${e.cnpj ? " · CNPJ " + esc(e.cnpj) : ""}</div>
     <div class="gp">${e.situacao_receita ? `<span class="pill ${e.situacao_receita === "ATIVA" ? "ok" : "atr"}">Receita: ${esc(e.situacao_receita)}</span>` : ""}${d.bloqueios.length ? `<span class="pill atr">${plural(d.bloqueios.length, "bloqueio", "bloqueios")}</span>` : ""}${d.mandato ? pillSem(d.mandato.situacao, "Mandato: " + rotulo(d.mandato.situacao)) : ""}${st.eu?.papel !== "cliente" ? `<button class="btn-m" id="f-prev" title="Abrir o portal exatamente como esta OSC vê">Ver como o cliente</button>` : ""}</div>`;
   $(".gx", g).onclick = () => fecharGaveta();
-  const fp = $("#f-prev", g); if (fp) fp.onclick = () => { fecharGaveta(); st.portalPrev = { id, sigla: e.sigla }; irPara("portal"); };
+  const fp = $("#f-prev", g); if (fp) fp.onclick = () => { const u = location.origin + location.pathname + "#portal=" + id; const w = window.open(u, "_blank"); if (!w) { fecharGaveta(); st.portalPrev = { id, sigla: e.sigla }; irPara("portal"); } };
   $(".gb", g).innerHTML =
     bloco("Trilha de conformidade", mini(null, d.trilha.map((t) => `<tr style="cursor:default"><td class="forte">${t.ordem}. ${esc(t.etapa)}</td><td>${pillSem(t.status)}</td><td style="font-size:12.5px;color:var(--ink2)">${esc(humano(t.proximo_passo || ""))}</td></tr>`), "Trilha ainda não medida.")) +
     (d.bloqueios.length ? bloco("Bloqueios abertos", mini(null, d.bloqueios.map((b) => `<tr style="cursor:default"><td class="forte">${esc(rotulo(b.motivo))}</td><td style="font-size:12.5px">${esc(b.detalhe || "")}</td><td class="n">${dmy(b.desde)}</td></tr>`))) : "") +

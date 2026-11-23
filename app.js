@@ -915,6 +915,8 @@ async function iniciar() {
   const mm = await sb.rpc("app_meus_modulos");
   st.mods = mm.data || [];
   if (st.eu.papel === "cliente") { st.view = "portal"; casca(); renderView(); return; }
+  const mp = location.hash.match(/^#portal=([0-9a-f-]{36})$/i);
+  if (mp) { st.portalPrev = { id: mp[1] }; st.view = "portal"; }
   if (!st.escopo) st.escopo = gestor() ? "equipe" : "minhas";
   if (st.view === "entrada" && !gestor()) st.view = "inicio";
   casca(); renderView();
