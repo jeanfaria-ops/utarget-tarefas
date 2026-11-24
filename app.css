@@ -658,3 +658,47 @@ button{cursor:pointer;background:none;border:0;padding:0}
 .btn-m:hover{border-color:var(--azul);color:var(--azul)}
 .inp{font:400 13.5px Montserrat,sans-serif;color:var(--ink);background:var(--sup);border:1px solid var(--linha);border-radius:10px;padding:10px 12px}
 .inp:focus-visible{outline:2px solid var(--azul);outline-offset:1px}
+
+/* ===== Camada Descomplica (24/11/2026): papel, filetes no lugar de cartões, números de livro-caixa, um acento por tela ===== */
+:root{--bg:#FBF9F5;--sup:#FBF9F5;--sup2:#F2EEE6;--sup3:#ECE6DB;--ink:#2B2B2B;--ink2:#404040;--ink3:#6B6760;--regua:#2B2B2B;--linha:#D6CEC0;--linha2:#DDD6CA;--r:3px;--sombra:none;--sombra2:none;--marca:rgba(255,145,0,.42);--mono:"JetBrains Mono","Cascadia Mono",Consolas,ui-monospace,monospace}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0E1B2A;--sup:#0E1B2A;--sup2:#14263A;--sup3:#1B3048;--ink:#F1EDE6;--ink2:#D9D4CB;--ink3:#A39D93;--regua:#F1EDE6;--linha:#34495F;--linha2:#2B3F55;--marca:rgba(255,145,0,.55)}}
+:root[data-theme="dark"]{--bg:#0E1B2A;--sup:#0E1B2A;--sup2:#14263A;--sup3:#1B3048;--ink:#F1EDE6;--ink2:#D9D4CB;--ink3:#A39D93;--regua:#F1EDE6;--linha:#34495F;--linha2:#2B3F55;--marca:rgba(255,145,0,.55)}
+html,body{font-size:15px}
+.top{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none;border-bottom:2px solid var(--regua)}
+.top h1{font-size:24px;letter-spacing:-.4px}
+.card,.kpi,.mod-c,.ini-p{background:transparent;border:0;border-top:2px solid var(--regua);border-radius:0;box-shadow:none;padding-left:0;padding-right:0}
+.kpi:hover,.mod-c:hover{transform:none;box-shadow:none;background:var(--sup2)}
+.kpis{gap:0 20px}
+.kpi .v,.pl .pn,.ml b,.tb .n,.num{font-family:var(--mono);font-weight:600;letter-spacing:-.02em}
+.kpi .v{font-size:26px}
+.kpi .r i,.leg i,.chip i{border-radius:1px}
+.sec-h h2{font-size:19px;font-weight:800;letter-spacing:-.2px}
+.tb th{text-transform:none;letter-spacing:0;font-size:12px;color:var(--ink);border-bottom:2px solid var(--regua)}
+.tb td{border-bottom-color:var(--linha2)}
+.tb tr:last-child td{border-bottom:1px solid var(--linha2)}
+.pill,.pill.atr,.pill.risco,.pill.ok,.pill.neu{background:none;border-radius:0;padding:0}
+.pill::before{content:"";width:8px;height:8px;border-radius:1px;background:currentColor;flex:0 0 auto}
+.pill.multa{border-radius:2px;padding:1px 7px}
+.pill.multa::before{display:none}
+.chip{border-radius:var(--r)}
+.btn,.row,.pl,.nav button,.seg,.seg button,.side .tema button,.osc{border-radius:var(--r)}
+.side .rot,.ini-pt{text-transform:none;letter-spacing:0;font-size:12px}
+/* início: frase com marca-texto */
+.ini-h h2,.saud h2{font-size:clamp(26px,3.6vw,40px);letter-spacing:-.03em;line-height:1.1}
+.ini-h p,.saud p{font-size:17px;max-width:68ch}
+.ini-h p b,.saud p b{background:linear-gradient(transparent 52%,var(--marca) 52%,var(--marca) 92%,transparent 92%);padding:0 .06em;box-decoration-break:clone;-webkit-box-decoration-break:clone;color:var(--ink)!important}
+.ini-p{padding-top:12px}
+/* saldo em conta */
+.saldo-svg{width:100%;height:auto;display:block;margin-top:8px}
+.saldo-svg .grade{stroke:var(--linha2);stroke-width:1}
+.saldo-svg .zero{stroke:var(--ink);stroke-width:1.5}
+.saldo-svg .eixo{font:12px var(--mono);fill:var(--ink3)}
+.saldo-svg .area{fill:var(--azul);opacity:.14}
+.saldo-svg .real{fill:none;stroke:var(--azul);stroke-width:2.5}
+.saldo-svg .prev{fill:none;stroke:var(--azul);stroke-width:2.5;stroke-dasharray:6 6;opacity:.85}
+.saldo-svg .hoje{stroke:var(--laranja);stroke-width:2.5}
+.saldo-svg .rot{font:600 13px Montserrat,system-ui,sans-serif;fill:var(--ink)}
+.saldo-svg .ponto{fill:var(--bg);stroke:var(--ink);stroke-width:2}
+.leg i.ln{width:22px;height:0;border-top:2.5px solid var(--azul);border-radius:0}
+.leg i.ln.tr{border-top-style:dashed}
+.leg i.hj{width:3px;height:14px;background:var(--laranja);border-radius:0}

@@ -488,6 +488,37 @@ async function telaAtendimento() {
 }
 
 // ---------------------------------------------------------------- FINANCEIRO
+
+// Saldo em conta dia a dia (degraus) + previsto da planilha (tracejado). Desde 24/11/2026.
+const brlK = (v) => (v == null ? "—" : Math.abs(v) >= 1000 ? "R$ " + (v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil" : brl(v));
+function saldoSvg(saldos, prev) {
+  if (!saldos || !saldos.length) return `<div class="vazio"><h3>Sem saldo registrado.</h3></div>`;
+  const D = (x) => new Date(String(x).slice(0, 10) + "T12:00:00"), iso = (d) => d.toLocaleDateString("sv-SE");
+  const d0 = D(saldos[0][0]), last = String(saldos[saldos.length - 1][0]).slice(0, 10);
+  let v = +saldos[saldos.length - 1][1]; const pr = [[last, v]];
+  (prev || []).forEach(([d, x]) => { if (String(d).slice(0, 10) > last) { v += +x; pr.push([String(d).slice(0, 10), v]); } });
+  const lp = D(pr[pr.length - 1][0]); let dEnd = new Date(lp.getFullYear(), lp.getMonth() + 1, 0, 12);
+  const hj = D(hojeISO()); if (dEnd < hj) dEnd = new Date(hj.getTime() + 7 * 864e5);
+  pr.push([iso(dEnd), v]);
+  const vals = saldos.map((x) => +x[1]).concat(pr.map((x) => +x[1])), top = Math.max(...vals), bot = Math.min(0, ...vals);
+  const step = [10000, 25000, 50000, 100000, 200000].find((st) => (top - bot) / st <= 5) || 500000;
+  const ymax = Math.max(step, Math.ceil((top * 1.06) / step) * step), ymin = Math.floor(bot / step) * step;
+  const W = 1000, H = 300, PL = 8, PR = 8, PT = 26, PB = 30, span = Math.max(1, (dEnd - d0) / 864e5);
+  const X = (d) => PL + ((W - PL - PR) * ((D(d) - d0) / 864e5)) / span, Y = (y) => PT + ((H - PT - PB) * (ymax - y)) / (ymax - ymin);
+  const steps = (pts) => pts.map((q, i) => (i ? `H${X(q[0]).toFixed(1)}V${Y(+q[1]).toFixed(1)}` : `M${X(q[0]).toFixed(1)},${Y(+q[1]).toFixed(1)}`)).join("");
+  const real = steps(saldos), yb = Y(Math.max(0, ymin)), g = [];
+  for (let y = ymin; y <= ymax; y += step) if (y > 0) g.push(`<line x1="${PL}" x2="${W - PR}" y1="${Y(y).toFixed(1)}" y2="${Y(y).toFixed(1)}" class="grade"/><text x="${W - PR}" y="${(Y(y) - 5).toFixed(1)}" class="eixo" text-anchor="end">${(y / 1000).toLocaleString("pt-BR")} mil</text>`);
+  for (let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1, 12); m <= dEnd; m = new Date(m.getFullYear(), m.getMonth() + 1, 1, 12)) { const x = X(iso(m)); g.push(`<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${PT}" y2="${yb.toFixed(1)}" class="grade"/><text x="${(x + 4).toFixed(1)}" y="${H - 10}" class="eixo">${MES[m.getMonth()]}</text>`); }
+  const minR = saldos.reduce((a, b) => (+b[1] < +a[1] ? b : a)), po = pr.slice(1, -1), minP = po.length ? po.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
+  const ann = (q, t, below) => { const x = X(q[0]), y = Y(+q[1]), r = x < W * 0.7; return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" class="ponto"/><text x="${(r ? x + 8 : x - 8).toFixed(1)}" y="${(below ? y + 18 : y - 10).toFixed(1)}" class="rot" text-anchor="${r ? "start" : "end"}">${esc(t)}</text>`; };
+  const hx = X(hojeISO());
+  return `<svg viewBox="0 0 ${W} ${H}" class="saldo-svg" role="img" aria-label="Saldo em conta dia a dia e previsto">${g.join("")}<line x1="${PL}" x2="${W - PR}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" class="zero"/>
+    <path d="${real}V${yb.toFixed(1)}H${X(saldos[0][0]).toFixed(1)}Z" class="area"/><path d="${real}" class="real"/>${pr.length > 2 ? `<path d="${steps(pr)}" class="prev"/>` : ""}
+    ${hx > PL && hx < W - PR ? `<line x1="${hx.toFixed(1)}" x2="${hx.toFixed(1)}" y1="${PT - 14}" y2="${yb.toFixed(1)}" class="hoje"/><text x="${(hx + 6).toFixed(1)}" y="${PT - 4}" class="rot">hoje</text>` : ""}
+    ${ann(minR, `${dm(String(minR[0]))}: ${brlK(+minR[1])}`, false)}${minP && minP[1] < +saldos[saldos.length - 1][1] ? ann(minP, `${dm(String(minP[0]))}: ${brlK(minP[1])} previsto`, true) : ""}</svg>
+    <div class="leg"><span><i class="ln"></i>saldo em conta (até ${dm(last)})</span>${pr.length > 2 ? `<span><i class="ln tr"></i>previsto na planilha</span>` : ""}<span><i class="hj"></i>hoje</span></div>`;
+}
+
 async function telaFinanceiro() {
   cabecalho("Financeiro", "Caixa e recebimentos da Utarget");
   carregandoView();
@@ -506,8 +537,10 @@ async function telaFinanceiro() {
       ${kpiM("Recebido no mês", brl(i.recebido_mes), `pago no mês ${brl(i.pago_mes)}`, "ok")}
       ${kpiM("A receber no mês", brl(mes.a_receber), `faturado ${brl(mes.faturado)}`, mes.a_receber > 0 ? "risco" : "")}
       ${semInad ? kpiM("Inadimplência", "—", "sem contas a receber por cliente na base", "") : kpiM("Inadimplência", brl(i.inadimplencia), `${i.clientes_inadimplentes ?? 0} clientes`, i.inadimplencia > 0 ? "atr" : "ok")}
-      ${kpiM("Saldo em bancos", brl(i.saldo_bancos), `fôlego ${n1(i.folego_meses)} mês · em ${dmy(i.saldo_em)}`, i.folego_meses < 1 ? "atr" : "")}
+      ${kpiM("Caixa total", brl(i.saldo_bancos), `${brl(i.saldo_conta_corrente)} em conta + ${brl(i.reserva_aplicada)} de reserva · fôlego ${n1(i.folego_meses)} meses (${n1(i.folego_sem_reserva)} sem a reserva)`, i.folego_meses < 1 ? "atr" : "")}
     </div>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Saldo em conta</h2><p>Dia a dia e o que a planilha do financeiro prevê. A reserva aplicada no BB fica à parte e entra no fôlego.</p></div></div>
+      ${saldoSvg(d.saldos, d.previsto)}</section>
     <div class="grade">
       <section class="card"><div class="sec-h"><div><h2>Mês a mês</h2><p>Faturado, recebido e pago${ms.length < ms0.length ? ` desde ${comp(ms[0].mes)}, primeiro mês com dado importado` : " nos últimos 12 meses"}.</p></div></div>
         <div class="leg"><span><i style="background:var(--c-ok)"></i>Faturado</span><span><i style="background:var(--ok-ink)"></i>Recebido</span><span><i style="background:var(--c-risco)"></i>Pago</span></div>
