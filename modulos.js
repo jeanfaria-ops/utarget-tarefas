@@ -768,6 +768,32 @@ td b{font-size:11px}td small{display:block;color:var(--ink3);font-size:9px}
 .rod{position:absolute;left:15mm;right:15mm;bottom:9mm;display:flex;justify-content:space-between;font-size:9px;color:var(--ink3);border-top:1px solid var(--linha);padding-top:6px}
 .acoes{position:fixed;top:12px;right:16px;display:flex;gap:8px}.acoes button{font:700 13px Montserrat,sans-serif;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--azul);color:#fff}.acoes button.s{background:#fff;color:var(--ink);border:1px solid var(--linha)}
 @page{size:A4;margin:0}@media print{body{background:#fff}.pg{margin:0;box-shadow:none}.acoes{display:none}}
+/* Descomplica (24/11/2026): filetes no lugar de caixas, números de livro-caixa, rótulos sem caixa alta, marca-texto na leitura */
+:root{--ink:#2B2B2B;--ink2:#404040;--ink3:#6B6760;--linha:#DDD6CA;--papel:#FBF9F5;--mono:"JetBrains Mono","Cascadia Mono",Consolas,ui-monospace,monospace;--marca:rgba(255,145,0,.42)}
+html,body{background:#E7E2D8}.pg{box-shadow:none}
+.bar-top{border-bottom:2px solid var(--ink)}
+h1{font-size:26px;letter-spacing:-.6px;line-height:1.15}
+.sub{font-size:12px}
+.kp{gap:0;border-top:2px solid var(--ink);margin-bottom:6px}
+.k,.k.dest,.k.alerta,.k.aviso,.k.bom{background:none;border-radius:0;padding:8px 10px 6px 0;color:var(--ink)}
+.k + .k{border-left:1px solid var(--linha);padding-left:10px}
+.k .r,.k.dest .r{text-transform:none;letter-spacing:0;font-size:10px;font-weight:700;color:var(--ink2)}
+.k .s,.k.dest .s{color:var(--ink3)}
+.k .v{font-family:var(--mono);font-weight:600;font-size:18px;letter-spacing:-.02em}
+.k.dest .v{color:var(--azul)}.k.dest .r::before{content:"";display:inline-block;width:7px;height:7px;background:var(--azul);margin-right:5px}
+.k.alerta .v,.k.alerta .r{color:#B3261E}.k.alerta .r::before{content:"";display:inline-block;width:7px;height:7px;background:#B3261E;margin-right:5px}
+.k.aviso .r::before{content:"";display:inline-block;width:7px;height:7px;background:var(--laranja);margin-right:5px}
+h2{text-transform:none;letter-spacing:-.2px;font-size:15px;color:var(--ink);border-left:0;padding:8px 0 0;border-top:2px solid var(--ink);margin:20px 0 8px}
+.dl .t{border-radius:0;background:#F2EEE6}.dl .t i{border-radius:0}
+.dl .n,td.n{font-family:var(--mono)}
+th{text-transform:none;letter-spacing:0;font-size:9.5px;color:var(--ink);border-bottom:2px solid var(--ink)}
+.bar i:first-child,.bar i:last-child{border-radius:0}
+.leg i{border-radius:1px}
+.box{background:none;border-radius:0;padding:0;font-size:12px}
+.box b{background:linear-gradient(transparent 52%,var(--marca) 52%,var(--marca) 92%,transparent 92%);padding:0 .05em}
+.rod{border-top:2px solid var(--ink)}
+.acoes button{border-radius:3px}.acoes button.s{border:1px solid var(--ink)}
+@media print{html,body{background:#fff}}
 </style></head><body>
 <div class="acoes"><button onclick="print()">Salvar em PDF / imprimir</button><button class="s" onclick="window.close()">Fechar</button></div>
 <div class="pg">
