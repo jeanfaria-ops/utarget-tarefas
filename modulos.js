@@ -700,9 +700,10 @@ async function telaMargem() {
       <td class="cl-c"><b><span class="tg">${ab ? "▾" : "▸"}</span>${esc(x.grupo)}</b><small>${x.cnpjs > 1 ? plural(x.cnpjs, "CNPJ", "CNPJs") + " no grupo" : esc(x.unidades?.[0]?.cliente || "")}</small></td>
       <td class="n">${brl(x.honorario)}</td><td class="n">${x.custo_total == null ? "—" : brl(x.custo_total)}</td>
       <td class="n">${x.resultado == null ? "—" : `<span class="${x.resultado < 0 ? "t-atr" : ""}">${brl(x.resultado)}</span>`}</td><td class="n">${mg(x.margem_pct)}</td>
+      <td class="n" title="${x.recebido_pct == null ? "Sem parcela vencida nos últimos 90 dias" : `Recebeu ${n1(x.recebido_pct)}% do que venceu nos últimos 90 dias`}${+x.vencido > 0 ? ` · ${brl(x.vencido)} vencido desde ${dmy(x.vencido_desde)}` : ""}">${x.custo_total == null ? "—" : mg(x.margem_caixa_pct)}${+x.vencido > 0 ? `<small style="display:block;color:var(--atr-ink);font-size:11.5px">${brl(x.vencido)} vencido</small>` : ""}</td>
       <td class="hm">${top ? `<b style="font-size:12.5px">${esc(top.departamento)}</b> <small style="color:var(--ink3)">${n1(top.horas)}h · ${n0(top.pct)}% do custo</small>` : '<span style="color:var(--ink3)">sem apontamento</span>'}</td>
       <td><div class="mg-acts"><button class="st-b" data-mgg="${esc(x.grupo)}" title="Abrir análise de rentabilidade">${pillSem(x.status)}</button>${botaoRel("g", x.grupo)}</div></td></tr>
-      ${ab ? `<tr class="un"><td colspan="7"><div class="mg-ab">
+      ${ab ? `<tr class="un"><td colspan="8"><div class="mg-ab">
         <div><div class="mg-t">Custo por departamento</div>${(x.deptos || []).map((k) => `<div class="mg-l"><span>${esc(k.departamento)}</span><span class="tr"><i style="width:${k.pct}%"></i></span><b>${brl(k.custo)}</b><small>${n1(k.horas)}h</small></div>`).join("") || '<div style="color:var(--ink3);font-size:12.5px">Sem horas apontadas na competência.</div>'}</div>
         <div><div class="mg-t">CNPJs do grupo</div>${(x.unidades || []).map((u) => `<button class="mg-u" ${u.entidade_id ? `data-ent="${u.entidade_id}"` : ""}><span>${esc(u.sigla || "—")}</span><small>${esc(u.cliente || "")}</small><b>${brl(u.honorario)}</b></button>`).join("")}</div>
       </div></td></tr>` : ""}`;
@@ -728,7 +729,8 @@ async function telaMargem() {
         <span class="num ${resOp < 0 ? "t-atr" : ""}">${kbrl(resOp)}</span>
         <span class="sub">Margem de <b>${n1((100 * resOp) / (honTot || 1))}%</b> sobre <b>${brl(honTot)}</b> de honorários, já com <b>${brl(tribTot)}</b> de tributos no custo.<br>
           <b>${neg.length}</b> ${neg.length === 1 ? "grupo dá" : "grupos dão"} prejuízo${neg.length ? ` (${neg.slice(0, 3).map((x) => esc(x.grupo)).join(", ")})` : ""}.<br>
-          <b>${brl(semDono)}</b> do custo está em horas de clientes sem contrato ativo no banco.</span></div>
+          <b>${brl(semDono)}</b> do custo está em horas de clientes sem contrato ativo no banco.<br>
+          Inadimplência: <b>${brl(d.grupos.reduce((a, x) => a + +(x.vencido || 0), 0))}</b> vencidos no Conta Azul; descontando o que não foi pago nos últimos 90 dias, o resultado cai <b>${brl(comHoras.reduce((a, x) => a + Math.max(0, +x.resultado - +(x.resultado_caixa ?? x.resultado)), 0))}</b> por mês (coluna "Margem recebida").</span></div>
       <div>${vizCascata(cascata)}</div></div></section>
     ${cItens.length ? `<section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Do que é feito o custo comum</h2><p>${brl(cItens.reduce((a, i) => a + +i.valor, 0))} por mês divididos pelas horas de cliente. Aquisição de clientes (comercial e social mídia) não entra: são <b>${brl(aqTot)}</b> por mês fora da margem.</p></div></div>
         <div class="bi-r c4">${COMUM_G.map(([g, rot]) => `<div><div class="mg-t" style="margin-bottom:6px">${esc(g)} · <b>${brl(somaG(g))}</b></div>${vizBarras(cItens.filter((i) => i.grupo === g).map((i) => ({ rot: i.item.replace(/^(Gestão|Horas internas) · /, ""), valor: brl(i.valor), partes: [{ v: +i.valor, cor: "var(--s-neu)", rot: i.item }] })), { max: Math.max(...cItens.map((i) => +i.valor)) })}</div>`).join("")}</div>
@@ -750,7 +752,7 @@ async function telaMargem() {
     <div class="card" style="padding:4px 8px">
       <div class="sec-h" style="padding:12px 8px 4px"><div><h2>${modo === "grupo" ? "Grupos econômicos" : "Por CNPJ"}</h2><p>${modo === "grupo" ? "Do pior resultado ao melhor. Clique na linha para abrir; na situação, para a análise completa." : "Cada CNPJ com as horas lançadas nele. Clique na situação para a análise do CNPJ."}</p></div>
         ${segV("mg", [["grupo", "Por grupo"], ["cnpj", "Por CNPJ"]], modo)}</div>
-      ${modo === "grupo" ? tabela([["Grupo"], ["Honorário", "n"], ["Custo", "n"], ["Resultado", "n"], ["Margem", "n"], ["Departamento que mais pesa", "hm"], ["Situação"]], gs.map(linha))
+      ${modo === "grupo" ? tabela([["Grupo"], ["Honorário", "n"], ["Custo", "n"], ["Resultado", "n"], ["Margem", "n"], ["Margem recebida", "n"], ["Departamento que mais pesa", "hm"], ["Situação"]], gs.map(linha))
         : tabela([["CNPJ"], ["Honorário", "n"], ["Horas", "n hm"], ["Custo", "n"], ["Resultado", "n"], ["Margem", "n"], ["Situação"]],
           cnpjs.filter((x) => casa(x, ["sigla", "cliente", "grupo"])).map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : ""}><td class="cl-c"><b>${esc(x.sigla || "—")}</b><small>${esc(x.cliente || "")}${x.grupo && x.grupo !== x.sigla ? " · grupo " + esc(x.grupo) : ""}</small></td>
             <td class="n">${brl(x.honorario)}</td><td class="n hm">${x.horas == null ? "—" : n1(x.horas)}</td><td class="n">${x.custo == null ? "—" : brl(x.custo)}</td>
