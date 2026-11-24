@@ -61,6 +61,8 @@ Object.assign(I, {
   atendimento: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z"/></svg>',
   financeiro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 6.5c-.8-1.3-2.6-2-5-2-3 0-4.5 1.4-4.5 3.2 0 4.3 9.5 2.3 9.5 6.8 0 2-1.7 3.5-5 3.5-2.6 0-4.4-.9-5.2-2.3"/></svg>',
   margem: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18M6 16l4-5 3 3 5-7"/><path d="M15 7h3v3"/></svg>',
+  equipe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.3 5 2.6 5 5.8"/></svg>',
+  fechamento: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="M15 16l1.5 1.5L19 15"/></svg>',
   acessos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.7.8 2.8 2.6 3 5.2"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
 });
@@ -553,9 +555,111 @@ async function telaFinanceiro() {
           d.inadimplencia.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">${esc(x.cliente)}</td><td class="n">${x.parcelas}</td><td class="n">${brl(x.em_aberto)}</td><td class="n"><span class="pill ${x.dias > 30 ? "atr" : "risco"}">${x.dias}</span></td></tr>`), semInad ? "Ainda não medida: a planilha de fluxo de caixa registra as entradas por banco, não por cliente. Entra com a carga do Conta Azul (contas a receber por cliente)." : "Nenhuma parcela vencida em aberto.")}</section>
       </div>
     </div>
-    <div style="color:var(--ink3);font-size:12.5px;margin:4px">Última importação: ${quando(i.ultima_importacao)}.</div>
-    ${linhaAgora([i.folego_meses != null && i.folego_meses < 1 ? `O caixa cobre <b>${n1(i.folego_meses)}</b> mês de despesa: confirmar os recebimentos do mês antes de qualquer compra.` : "", pct2 >= 50 ? `<b>${esc(top2.map((c) => c.cliente).join(" e "))}</b> somam ${n1(pct2)}% do recorrente: fechar novos contratos dilui o risco.` : "", semInad ? "A inadimplência passa a ser medida quando o contas a receber do Conta Azul entrar na fase 1." : ""].filter(Boolean).join(" ") || "Caixa e recebimentos em ordem.")}`;
+    ${blocoContaAzul(d.ca)}
+    <div style="color:var(--ink3);font-size:12.5px;margin:4px">Última importação da planilha: ${quando(i.ultima_importacao)}.</div>
+    ${linhaAgora([d.ca && d.ca.das_aberto && d.ca.das_aberto.periodos_em_aberto ? `<b>${d.ca.das_aberto.periodos_em_aberto} DAS da própria Utarget em aberto</b> (${brl(d.ca.das_aberto.principal_em_aberto)} de principal, de ${comp(d.ca.das_aberto.primeiro_pa)} a ${comp(d.ca.das_aberto.ultimo_pa)}): confirmar com o Izaac se foram pagos ou parcelados.` : "", d.ca && (d.ca.dre || []).length && +d.ca.dre[d.ca.dre.length - 1].resultado_liquido < 0 ? `Resultado líquido de <b>${comp(d.ca.dre[d.ca.dre.length - 1].mes)}</b> no Conta Azul foi <b>${brl(d.ca.dre[d.ca.dre.length - 1].resultado_liquido)}</b>.` : "", i.folego_meses != null && i.folego_meses < 1 ? `O caixa cobre <b>${n1(i.folego_meses)}</b> mês de despesa: confirmar os recebimentos do mês antes de qualquer compra.` : "", pct2 >= 50 ? `<b>${esc(top2.map((c) => c.cliente).join(" e "))}</b> somam ${n1(pct2)}% do recorrente: fechar novos contratos dilui o risco.` : "", semInad ? "A inadimplência passa a ser medida quando o contas a receber do Conta Azul entrar na fase 1." : ""].filter(Boolean).join(" ") || "Caixa e recebimentos em ordem.")}`;
   $$(".bc").forEach((b) => { const [m, f, r, p] = b.dataset.tipm.split("|"); b.onmousemove = (e) => dica(e, `<div class="tt">${m}</div>${tipLinha("var(--c-ok)", "Faturado", f)}${tipLinha("var(--ok-ink)", "Recebido", r)}${tipLinha("var(--c-risco)", "Pago", p)}`); b.onmouseleave = () => dica(); });
+  ligaIr($("#view"));
+}
+
+
+// ---------------------------------------------------------------- Conta Azul (cópia sincronizada, vinda do Utarget Brain em 24/11/2026)
+function blocoContaAzul(ca) {
+  if (!ca || !(ca.dre || []).length) return "";
+  const dre = ca.dre, ult = dre[dre.length - 1] || {}, rec = (ca.receber || []), pe = ca.equilibrio || {}, das = ca.das_aberto || {};
+  const somaInad = (ca.inad_faixa || []).reduce((a, x) => a + (+x.valor || 0), 0);
+  const linhaDre = (rot, k, forte) => `<tr><td class="${forte ? "forte" : ""}">${rot}</td>${dre.map((m) => `<td class="n ${forte ? "forte" : ""}" style="${+m[k] < 0 ? "color:var(--atr-ink)" : ""}">${brlK(+m[k])}</td>`).join("")}</tr>`;
+  return `
+    <h2 class="h-sec" style="margin:28px 0 4px;font-size:22px;font-weight:800">Conta Azul</h2>
+    <p style="margin:0 0 12px;color:var(--ink2)">Cópia sincronizada do Conta Azul, com a classificação de DRE feita pela Cristina. Última cópia: ${quando(ca.sync)}.</p>
+    <div class="kpis">
+      ${kpiM("Resultado líquido", brl(ult.resultado_liquido), `${comp(ult.mes)} · receita bruta ${brl(ult.receita_bruta)}`, +ult.resultado_liquido < 0 ? "atr" : "ok")}
+      ${kpiM("Ponto de equilíbrio", brl(pe.ponto_equilibrio_receita), `${n1(pe.ponto_equilibrio_clientes)} clientes de ticket médio · margem de segurança ${pe.margem_seguranca == null ? "—" : n1(pe.margem_seguranca * 100) + "%"}`)}
+      ${kpiM("Vencido no Conta Azul", brl(somaInad), `${(ca.quem_deve || []).length} clientes com valor vencido`, somaInad > 0 ? "atr" : "ok")}
+      ${kpiM("DAS em aberto", das.periodos_em_aberto ? brl(das.principal_em_aberto) : "Nenhum", das.periodos_em_aberto ? `${das.periodos_em_aberto} períodos · de ${comp(das.primeiro_pa)} a ${comp(das.ultimo_pa)}` : "Simples Nacional em dia", das.periodos_em_aberto ? "atr" : "ok")}
+    </div>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Resultado por mês</h2><p>DRE dos meses fechados, das fórmulas sobre a cópia do Conta Azul. "A classificar" é lançamento sem categoria de DRE.</p></div></div>
+      <div class="tbw"><table class="tb"><thead><tr><th></th>${dre.map((m) => `<th class="n">${esc(comp(m.mes))}</th>`).join("")}</tr></thead><tbody>
+        ${linhaDre("Receita bruta", "receita_bruta", true)}${linhaDre("Impostos", "impostos")}${linhaDre("Receita líquida", "receita_liquida")}${linhaDre("Custos variáveis", "custos_variaveis")}${linhaDre("Margem de contribuição", "margem_contribuicao", true)}${linhaDre("Custos fixos", "custos_fixos")}${linhaDre("Resultado operacional", "resultado_operacional", true)}${linhaDre("Não operacional", "nao_operacional")}${linhaDre("Resultado líquido", "resultado_liquido", true)}${linhaDre("A classificar", "pendente_classificar")}
+      </tbody></table></div></section>
+    <div class="grade">
+      <section class="card"><div class="sec-h"><div><h2>A receber por mês</h2><p>Faturado na competência, esperado, recebido e em aberto.</p></div></div>
+        ${tabela([["Mês"], ["Faturado", "n"], ["Recebido", "n"], ["Vencido em aberto", "n"], ["A vencer", "n"], ["NF emitidas", "n"]],
+          rec.map((x) => `<tr style="cursor:default"><td class="forte">${esc(comp(x.mes))}</td><td class="n">${brl(x.faturado)}</td><td class="n">${brl(x.recebido_do_mes)}</td><td class="n" style="${+x.vencido_aberto > 0 ? "color:var(--atr-ink)" : ""}">${brl(x.vencido_aberto)}</td><td class="n">${brl(x.a_vencer)}</td><td class="n">${x.nf_qtd ?? "—"}</td></tr>`))}</section>
+      <div style="display:grid;gap:16px;align-content:start">
+        <section class="card"><div class="sec-h"><div><h2>Quem mais deve</h2><p>Os 10 maiores valores vencidos.</p></div></div>
+          ${tabela([["Cliente"], ["Vencido", "n"], ["Desde", "n"], ["Parcelas", "n"]],
+            (ca.quem_deve || []).map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.cliente)}</td><td class="n" style="color:var(--atr-ink)">${brl(x.vencido)}</td><td class="n">${dmy(x.vencimento_mais_antigo)}</td><td class="n">${x.parcelas_abertas}</td></tr>`), "Nenhum valor vencido.")}</section>
+        <section class="card"><div class="sec-h"><div><h2>Contas no Conta Azul</h2><p>Saldo atual informado pela API.</p></div></div>
+          ${tabela([["Conta"], ["Saldo", "n"]], (ca.contas || []).map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.nome)}<div style="color:var(--ink3);font-size:12px">${esc(x.banco || "")}</div></td><td class="n">${x.saldo == null ? "—" : brl(x.saldo)}</td></tr>`))}</section>
+      </div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------- placar de clientes (Margem), vindo do Utarget Brain
+const FAIXA_COR = { Desligar: "atr", Reajustar: "risco", Manter: "ok" };
+async function blocoPlacar(alvo) {
+  let d; try { d = await rpcMod("app_mod_placar"); } catch (e) { alvo.innerHTML = ""; return; }
+  const p = d.placar || [], per = d.periodo || {};
+  const cont = (f) => p.filter((x) => x.faixa === f).length;
+  alvo.innerHTML = `
+    <h2 style="margin:28px 0 4px;font-size:22px;font-weight:800">Placar de clientes</h2>
+    <p style="margin:0 0 12px;color:var(--ink2)">Resultado de cada cliente${per.inicio ? ` de ${dmy(per.inicio)} a ${dmy(per.fim)}` : ""}: faturado do Conta Azul contra horas e custo cheio. <b>${cont("Desligar")}</b> para desligar, <b>${cont("Reajustar")}</b> para reajustar, <b>${cont("Manter")}</b> para manter. Decisão de reajuste ou desligamento é da diretoria.</p>
+    <section class="card">${tabela([["Cliente"], ["Faixa"], ["Honorário/mês", "n"], ["Horas/mês", "n"], ["Faturado/hora", "n"], ["Empate/hora", "n"], ["Resultado", "n"], ["Reajuste p/ meta", "n"]],
+      p.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.entidade)}${x.observacao ? `<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.observacao)}</div>` : ""}</td><td>${x.faixa ? `<span class="pill ${FAIXA_COR[x.faixa] || "neu"}">${esc(x.faixa)}</span>` : "—"}</td><td class="n">${brl(x.honorario_mensal)}</td><td class="n">${n1(x.horas_mes)}</td><td class="n">${brl(x.faturado_hora)}</td><td class="n">${brl(x.faturado_hora_empate)}</td><td class="n" style="${+x.resultado < 0 ? "color:var(--atr-ink)" : ""}">${brl(x.resultado)}</td><td class="n">${x.reajuste_meta == null ? "—" : "+" + n1(x.reajuste_meta * 100) + "%"}</td></tr>`))}</section>`;
+}
+
+// ---------------------------------------------------------------- EQUIPE (capacidade, horas, custo, ponto, competição) · só diretoria
+async function telaEquipe() {
+  cabecalho("Equipe", "Capacidade por área, horas, custo, ponto e competição · dado pessoal e salarial, só diretoria");
+  carregandoView();
+  let d; try { d = await rpcMod("app_mod_equipe"); } catch (e) { return erroView(e); }
+  const meses = [...new Set((d.equipe_mes || []).map((x) => String(x.mes).slice(0, 10)))].sort();
+  const mesSel = meses[meses.length - 1];
+  const eq = (d.equipe_mes || []).filter((x) => String(x.mes).slice(0, 10) === mesSel);
+  const cap = (d.capacidade || []).filter((x) => String(x.mes).slice(0, 10) === mesSel);
+  const pt = (d.ponto_mes || []).filter((x) => String(x.mes).slice(0, 10) === mesSel);
+  const pct = (v) => (v == null ? "—" : n1(+v * (Math.abs(+v) <= 2 ? 100 : 1)) + "%");
+  $("#view").innerHTML = `
+    <p style="margin:0 0 12px;color:var(--ink2)">Mês de referência: <b>${esc(comp(mesSel))}</b>. Fonte: produtividade do G-Click, folha, ponto e Workmonitor (Utarget Brain).</p>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Capacidade por área</h2><p>Horas que a carteira pede no tempo padrão contra as horas disponíveis da equipe.</p></div></div>
+      ${tabela([["Área"], ["Demanda (padrão)", "n"], ["Horas reais", "n"], ["Capacidade", "n"], ["Utilização", "n"], ["Contratar acima de", "n"], ["Ociosa abaixo de", "n"]],
+        cap.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.area)}</td><td class="n">${n1(x.demanda_padrao)}</td><td class="n">${n1(x.horas_reais)}</td><td class="n">${n1(x.capacidade)}</td><td class="n" style="${+x.utilizacao > +x.limite_contratar ? "color:var(--atr-ink);font-weight:700" : ""}">${pct(x.utilizacao)}</td><td class="n">${pct(x.limite_contratar)}</td><td class="n">${pct(x.limite_ocioso)}</td></tr>`))}</section>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Pessoas no mês</h2><p>Horas, eficiência contra o tempo padrão, custo total e quanto cada pessoa precisa entregar para empatar e para a meta.</p></div></div>
+      ${tabela([["Pessoa"], ["Área"], ["Horas", "n"], ["Em clientes", "n"], ["Eficiência", "n"], ["Custo total", "n"], ["Receita atribuída", "n"], ["Empate", "n"], ["Meta", "n"]],
+        eq.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.papel || "")} · ${esc(x.vinculo || "")}</div></td><td>${esc(x.area_principal || "—")}</td><td class="n">${n1(x.horas)}</td><td class="n">${n1(x.horas_clientes)}</td><td class="n">${pct(x.eficiencia)}</td><td class="n">${x.sem_folha ? "sem folha" : brl(x.custo_total)}</td><td class="n">${brl(x.receita_atribuida)}</td><td class="n">${brl(x.entrega_empate)}</td><td class="n">${brl(x.entrega_meta)}</td></tr>`))}</section>
+    <div class="grade">
+      <section class="card"><div class="sec-h"><div><h2>Ponto e computador</h2><p>Dias, ausências, atrasos e tempo produtivo sobre a jornada.</p></div></div>
+        ${tabela([["Pessoa"], ["Dias", "n"], ["Ausências", "n"], ["Atrasos", "n"], ["Produtivo/jornada", "n"], ["Ociosas (h)", "n"]],
+          pt.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}</td><td class="n">${x.dias_trabalhados}</td><td class="n">${x.ausencias}</td><td class="n">${x.atrasos}</td><td class="n">${pct(x.produtivo_sobre_jornada)}</td><td class="n">${n1(x.horas_ociosas)}</td></tr>`), "Sem ponto importado para o mês.")}</section>
+      <section class="card"><div class="sec-h"><div><h2>Competição do trimestre</h2><p>Pontos de eficiência, prazo, qualidade e assiduidade. Só entra quem é elegível.</p></div></div>
+        ${tabela([["Pessoa"], ["Pontos", "n"], ["Eficiência", "n"], ["Prazo", "n"], ["Qualidade", "n"], ["Assiduidade", "n"]],
+          (d.competicao || []).filter((x) => x.elegivel).map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.area || "")}</div></td><td class="n forte">${n1(x.pontos)}</td><td class="n">${n1(x.p_eficiencia)}</td><td class="n">${n1(x.p_prazo)}</td><td class="n">${n1(x.p_qualidade)}</td><td class="n">${n1(x.p_assiduidade)}</td></tr>`))}</section>
+    </div>`;
+  ligaIr($("#view"));
+}
+
+// ---------------------------------------------------------------- FECHAMENTO CONTÁBIL (fichas da Cristina, vindas do Utarget Brain)
+async function telaFechamento() {
+  cabecalho("Fechamento contábil", "Pendências, propostas de lançamento e reaberturas por cliente");
+  carregandoView();
+  let d; try { d = await rpcMod("app_mod_fechamento"); } catch (e) { return erroView(e); }
+  const c = d.carteira || [], pend = d.pendencias || [];
+  const tot = (k) => c.reduce((a, x) => a + (+x[k] || 0), 0);
+  const prox = (x) => (+x.propostas_aguardando_rt ? "Aprovar propostas" : +x.aprovadas_nao_importadas ? "Importar no Domínio" : +x.reaberturas_abertas ? "Fechar reabertura" : +x.pendencias_abertas ? "Resolver pendências" : "Em dia");
+  $("#view").innerHTML = `
+    <div class="kpis">
+      ${kpiM("Pendências abertas", tot("pendencias_abertas"), `${c.filter((x) => +x.pendencias_abertas).length} clientes`, tot("pendencias_abertas") ? "risco" : "ok")}
+      ${kpiM("Propostas aguardando RT", tot("propostas_aguardando_rt"), "lançamentos propostos para aprovar", tot("propostas_aguardando_rt") ? "atr" : "ok")}
+      ${kpiM("Aprovadas não importadas", tot("aprovadas_nao_importadas"), "aguardando importação no Domínio", tot("aprovadas_nao_importadas") ? "risco" : "ok")}
+      ${kpiM("Reaberturas", tot("reaberturas_abertas"), "períodos reabertos", tot("reaberturas_abertas") ? "atr" : "ok")}
+    </div>
+    <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Por cliente</h2><p>Os ${c.length} clientes com ficha de fechamento. Lançamento só entra no Domínio depois de aprovado pela responsável técnica.</p></div></div>
+      ${tabela([["Cliente"], ["Pendências", "n"], ["Aguardando RT", "n"], ["Aprovadas não importadas", "n"], ["Reaberturas", "n"], ["Próximo passo"], ["Atualizado", "n"]],
+        c.map((x) => `<tr ${x.entidade_id ? `data-ent="${x.entidade_id}"` : 'style="cursor:default"'}><td class="forte">${esc(x.sigla)}<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.razao_social || "")}</div></td><td class="n">${x.pendencias_abertas}</td><td class="n">${x.propostas_aguardando_rt}</td><td class="n">${x.aprovadas_nao_importadas}</td><td class="n">${x.reaberturas_abertas}</td><td>${prox(x) === "Em dia" ? '<span class="pill ok">Em dia</span>' : `<span class="pill risco">${prox(x)}</span>`}</td><td class="n">${dmy(String(x.ultima_atualizacao || "").slice(0, 10))}</td></tr>`))}</section>
+    <section class="card"><div class="sec-h"><div><h2>Pendências abertas</h2><p>As 300 mais recentes.</p></div></div>
+      ${tabela([["Cliente"], ["Área"], ["Pendência"], ["Responsável"], ["Valor", "n"]],
+        pend.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.sigla)}</td><td>${esc(x.area || "")}</td><td style="white-space:normal">${esc(x.texto || "")}</td><td>${esc(x.responsavel || "—")}</td><td class="n">${x.valor == null ? "—" : brl(x.valor)}</td></tr>`), "Nenhuma pendência aberta.")}</section>`;
   ligaIr($("#view"));
 }
 
@@ -650,6 +754,7 @@ async function telaMargem() {
   $$("tr.gr").forEach((t) => (t.onclick = () => { const g = t.dataset.g; abertos.has(g) ? abertos.delete(g) : abertos.add(g); telaMargem(); }));
   $$("[data-seg=mg]").forEach((b) => (b.onclick = () => { st.margemModo = b.dataset.k; telaMargem(); }));
   ligaIr($("#view"));
+  { const pl = document.createElement("div"); pl.id = "placar"; $("#view").appendChild(pl); blocoPlacar(pl); } // placar do Utarget Brain (24/11/2026)
   $$("[data-mgg]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); analiseMargem({ p_grupo: b.dataset.mgg }); }));
   $$("[data-pt]").forEach((b) => (b.onclick = () => analiseMargem({ p_grupo: b.dataset.pt })));
   ligaTips($("#view"));
@@ -1343,6 +1448,7 @@ async function telaPortal() {
 Object.assign(MODS, {
   inicio: telaInicio, gclick: telaGclick, carteira: telaCarteira, legalizacao: telaLegalizacao, captacao: telaCaptacao, comercial: telaComercial,
   atendimento: telaAtendimento, financeiro: telaFinanceiro, margem: telaMargem, acessos: telaAcessos, portal: telaPortal,
+  equipe: telaEquipe, fechamento: telaFechamento,
 });
 
 iniciar();

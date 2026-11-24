@@ -727,3 +727,4 @@ html,body{font-size:15px}
 .eu .p{color:var(--ink3)}
 .eu button{color:var(--ink3);border-radius:0}
 .eu button:hover{color:var(--ink);background:var(--sup2)}
+.tb th.n{font-family:inherit;letter-spacing:0}
