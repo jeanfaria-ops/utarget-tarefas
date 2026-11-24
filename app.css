@@ -702,3 +702,28 @@ html,body{font-size:15px}
 .leg i.ln{width:22px;height:0;border-top:2.5px solid var(--azul);border-radius:0}
 .leg i.ln.tr{border-top-style:dashed}
 .leg i.hj{width:3px;height:14px;background:var(--laranja);border-radius:0}
+/* barra lateral no papel (24/11/2026): mesma superfície da página, régua à direita, item atual com filete laranja */
+.side{background:var(--bg);color:var(--ink);border-right:2px solid var(--regua);padding:24px 16px 16px}
+.side .lg-noite{display:none}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .side .lg-papel{display:none}:root:not([data-theme="light"]) .side .lg-noite{display:block}}
+:root[data-theme="dark"] .side .lg-papel{display:none}
+:root[data-theme="dark"] .side .lg-noite{display:block}
+.side .logo{margin:0 8px 24px}
+.nav{gap:0}
+.nav button{color:var(--ink2);font-weight:600;padding:9px 10px;border-radius:0;border-bottom:1px solid var(--linha2)}
+.nav button svg{color:var(--ink3)}
+.nav button:hover{background:var(--sup2);color:var(--ink)}
+.nav button[aria-current="page"]{background:transparent;color:var(--ink);font-weight:800;box-shadow:inset 4px 0 0 var(--laranja);padding-left:16px}
+.nav button[aria-current="page"] svg{color:var(--azul-txt)}
+.badge{border-radius:2px;font-family:var(--mono);font-weight:700}
+.side .rot{color:var(--ink);font-weight:800;font-size:12px;margin:22px 10px 6px;padding-bottom:6px;border-bottom:2px solid var(--regua)}
+.side .rot.n1{margin:20px 0 0;padding:0 10px 6px}
+.side .tema{margin:8px 0 0;gap:0;border:1px solid var(--linha)}
+.side .tema button{color:var(--ink2);border:0;border-radius:0}
+.side .tema button + button{border-left:1px solid var(--linha)}
+.side .tema button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.eu{border-top:2px solid var(--regua);padding:12px 4px 0}
+.av{border-radius:2px}
+.eu .p{color:var(--ink3)}
+.eu button{color:var(--ink3);border-radius:0}
+.eu button:hover{color:var(--ink);background:var(--sup2)}

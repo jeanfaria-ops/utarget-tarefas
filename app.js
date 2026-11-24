@@ -155,7 +155,7 @@ function casca() {
   app.innerHTML = `
   <div class="shell">
     <aside class="side">
-      <img class="logo" src="logo-azul.svg" alt="Utarget">
+      <img class="logo lg-papel" src="logo-claro.svg" alt="Utarget"><img class="logo lg-noite" src="logo-azul.svg" alt="" aria-hidden="true">
       <nav class="nav" aria-label="Principal">
         ${abas.map(([k, n, ic], i) => `${grupoTar.includes(k) && !grupoTar.includes(abas[i - 1]?.[0]) ? '<div class="rot n1">Tarefas</div>' : ""}${!grupoTar.includes(k) && k !== "inicio" && (grupoTar.includes(abas[i - 1]?.[0]) || abas[i - 1]?.[0] === "inicio") ? '<div class="rot n1">Módulos</div>' : ""}<button data-v="${k}" ${st.view === k ? 'aria-current="page"' : ""}>${ic}<span>${n}</span>${k === "entrada" && nEntrada ? `<span class="badge">${nEntrada}</span>` : ""}</button>`).join("")}
       </nav>
@@ -209,7 +209,7 @@ function cascaCliente() {
   app.innerHTML = `
   <div class="shell">
     <aside class="side">
-      <img class="logo" src="logo-azul.svg" alt="Utarget">
+      <img class="logo lg-papel" src="logo-claro.svg" alt="Utarget"><img class="logo lg-noite" src="logo-azul.svg" alt="" aria-hidden="true">
       <nav class="nav" aria-label="Principal">
         <div class="rot n1">Sua entidade</div>
         ${itens.map(([k, n, ic], i) => `<button data-anc="${k}" ${i === 0 ? 'aria-current="page"' : ""}>${ic}<span>${n}</span></button>`).join("")}
