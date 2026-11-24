@@ -615,27 +615,34 @@ async function telaEquipe() {
   carregandoView();
   let d; try { d = await rpcMod("app_mod_equipe"); } catch (e) { return erroView(e); }
   const meses = [...new Set((d.equipe_mes || []).map((x) => String(x.mes).slice(0, 10)))].sort();
-  const mesSel = meses[meses.length - 1];
+  // abre no último mês com folha importada: o mês corrente ainda não tem folha nem ponto (24/11/2026)
+  const comFolha = meses.filter((m) => (d.equipe_mes || []).some((x) => String(x.mes).slice(0, 10) === m && !x.sem_folha));
+  if (!meses.includes(st.equipeMes)) st.equipeMes = comFolha[comFolha.length - 1] || meses[meses.length - 1];
+  const mesSel = st.equipeMes;
+  const semFolhaMes = !comFolha.includes(mesSel), semPontoMes = !(d.ponto_mes || []).some((x) => String(x.mes).slice(0, 10) === mesSel);
   const eq = (d.equipe_mes || []).filter((x) => String(x.mes).slice(0, 10) === mesSel);
   const cap = (d.capacidade || []).filter((x) => String(x.mes).slice(0, 10) === mesSel);
   const pt = (d.ponto_mes || []).filter((x) => String(x.mes).slice(0, 10) === mesSel);
   const pct = (v) => (v == null ? "—" : n1(+v * (Math.abs(+v) <= 2 ? 100 : 1)) + "%");
   $("#view").innerHTML = `
-    <p style="margin:0 0 12px;color:var(--ink2)">Mês de referência: <b>${esc(comp(mesSel))}</b>. Fonte: produtividade do G-Click, folha, ponto e Workmonitor (Utarget Brain).</p>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 12px"><div class="seg" role="group" aria-label="Mês">${meses.map((m) => `<button data-eqm="${m}" aria-pressed="${m === mesSel}">${esc(comp(m))}</button>`).join("")}</div>
+      <span style="color:var(--ink2)">Fonte: produtividade do G-Click, folha, ponto e Workmonitor (Utarget Brain).</span></div>
+    ${semFolhaMes || semPontoMes ? `<div class="agora"><span class="ag-r">Atenção</span><span>${esc(comp(mesSel))} ainda ${semFolhaMes ? "não tem a folha importada" : ""}${semFolhaMes && semPontoMes ? " nem " : ""}${semPontoMes ? "o ponto e o Workmonitor importados" : ""}: custo, empate, meta e ponto ficam em branco até a carga. As horas do G-Click já estão.</span></div>` : ""}
     <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Capacidade por área</h2><p>Horas que a carteira pede no tempo padrão contra as horas disponíveis da equipe.</p></div></div>
       ${tabela([["Área"], ["Demanda (padrão)", "n"], ["Horas reais", "n"], ["Capacidade", "n"], ["Utilização", "n"], ["Contratar acima de", "n"], ["Ociosa abaixo de", "n"]],
         cap.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.area)}</td><td class="n">${n1(x.demanda_padrao)}</td><td class="n">${n1(x.horas_reais)}</td><td class="n">${n1(x.capacidade)}</td><td class="n" style="${+x.utilizacao > +x.limite_contratar ? "color:var(--atr-ink);font-weight:700" : ""}">${pct(x.utilizacao)}</td><td class="n">${pct(x.limite_contratar)}</td><td class="n">${pct(x.limite_ocioso)}</td></tr>`))}</section>
     <section class="card" style="margin-bottom:16px"><div class="sec-h"><div><h2>Pessoas no mês</h2><p>Horas, eficiência contra o tempo padrão, custo total e quanto cada pessoa precisa entregar para empatar e para a meta.</p></div></div>
       ${tabela([["Pessoa"], ["Área"], ["Horas", "n"], ["Em clientes", "n"], ["Eficiência", "n"], ["Custo total", "n"], ["Receita atribuída", "n"], ["Empate", "n"], ["Meta", "n"]],
-        eq.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.papel || "")} · ${esc(x.vinculo || "")}</div></td><td>${esc(x.area_principal || "—")}</td><td class="n">${n1(x.horas)}</td><td class="n">${n1(x.horas_clientes)}</td><td class="n">${pct(x.eficiencia)}</td><td class="n">${x.sem_folha ? "sem folha" : brl(x.custo_total)}</td><td class="n">${brl(x.receita_atribuida)}</td><td class="n">${brl(x.entrega_empate)}</td><td class="n">${brl(x.entrega_meta)}</td></tr>`))}</section>
+        eq.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.papel || "")} · ${esc(x.vinculo || "")}</div></td><td>${esc(x.area_principal || "—")}</td><td class="n">${n1(x.horas)}</td><td class="n">${n1(x.horas_clientes)}</td><td class="n" title="${x.eficiencia == null ? "Sem tarefas com tempo padrão definido no mês" : ""}">${x.eficiencia == null ? '<span style="color:var(--ink3)">sem padrão</span>' : pct(x.eficiencia)}</td><td class="n">${x.sem_folha ? '<span style="color:var(--ink3)">sem folha</span>' : brl(x.custo_total)}</td><td class="n">${brl(x.receita_atribuida)}</td><td class="n">${brl(x.entrega_empate)}</td><td class="n">${brl(x.entrega_meta)}</td></tr>`))}</section>
     <div class="grade">
       <section class="card"><div class="sec-h"><div><h2>Ponto e computador</h2><p>Dias, ausências, atrasos e tempo produtivo sobre a jornada.</p></div></div>
         ${tabela([["Pessoa"], ["Dias", "n"], ["Ausências", "n"], ["Atrasos", "n"], ["Produtivo/jornada", "n"], ["Ociosas (h)", "n"]],
           pt.map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}</td><td class="n">${x.dias_trabalhados}</td><td class="n">${x.ausencias}</td><td class="n">${x.atrasos}</td><td class="n">${pct(x.produtivo_sobre_jornada)}</td><td class="n">${n1(x.horas_ociosas)}</td></tr>`), "Sem ponto importado para o mês.")}</section>
       <section class="card"><div class="sec-h"><div><h2>Competição do trimestre</h2><p>Pontos de eficiência, prazo, qualidade e assiduidade. Só entra quem é elegível.</p></div></div>
         ${tabela([["Pessoa"], ["Pontos", "n"], ["Eficiência", "n"], ["Prazo", "n"], ["Qualidade", "n"], ["Assiduidade", "n"]],
-          (d.competicao || []).filter((x) => x.elegivel).map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.area || "")}</div></td><td class="n forte">${n1(x.pontos)}</td><td class="n">${n1(x.p_eficiencia)}</td><td class="n">${n1(x.p_prazo)}</td><td class="n">${n1(x.p_qualidade)}</td><td class="n">${n1(x.p_assiduidade)}</td></tr>`))}</section>
+          (d.competicao || []).filter((x) => x.elegivel).map((x) => `<tr style="cursor:default"><td class="forte">${esc(x.usuario)}${x.criterios_com_dado < 4 ? `<div style="color:var(--ink3);font-size:12px;font-weight:400">${x.criterios_com_dado} de 4 critérios com dado</div>` : ""}<div style="color:var(--ink3);font-size:12px;font-weight:400">${esc(x.area || "")}</div></td><td class="n forte">${n1(x.pontos)}</td><td class="n">${n1(x.p_eficiencia)}</td><td class="n">${n1(x.p_prazo)}</td><td class="n">${n1(x.p_qualidade)}</td><td class="n">${n1(x.p_assiduidade)}</td></tr>`))}</section>
     </div>`;
+  $$("[data-eqm]").forEach((b) => (b.onclick = () => { st.equipeMes = b.dataset.eqm; telaEquipe(); }));
   ligaIr($("#view"));
 }
 
