@@ -171,7 +171,7 @@ function casca() {
       <header class="top"><div class="in">
         <img class="mlogo" src="logo-claro.svg" alt="Utarget">
         <div class="tit"><h1 id="titulo"></h1><div class="sub" id="subtitulo"></div></div>
-        ${temMod("tarefas") ? `<div class="seg top-seg" role="group" aria-label="Visão das tarefas"><button data-e="minhas" aria-pressed="${st.escopo === "minhas"}">Minhas</button><button data-e="equipe" aria-pressed="${st.escopo === "equipe"}">Equipe</button></div>` : ""}
+        ${temMod("tarefas") && gestor() ? `<div class="seg top-seg" role="group" aria-label="Visão das tarefas"><button data-e="minhas" aria-pressed="${st.escopo === "minhas"}">Minhas</button><button data-e="equipe" aria-pressed="${st.escopo === "equipe"}">Equipe</button></div>` : ""}
         <label class="busca"><span class="sr" hidden>Buscar</span>${I.busca}<input id="q" type="search" placeholder="Buscar tarefa, cliente, pessoa…" value="${esc(st.f.q)}" autocomplete="off"><kbd>/</kbd></label>
         ${podeCriar() ? `<button class="btn p" id="nova" title="Nova tarefa (N)">${I.mais}<span class="nv-t">Nova tarefa</span></button>` : ""}
         <button class="ib" id="att" title="Atualizar" aria-label="Atualizar">${I.att}</button>
@@ -962,7 +962,8 @@ async function iniciar() {
   if (st.eu.papel === "cliente") { st.view = "portal"; casca(); renderView(); return; }
   const mp = location.hash.match(/^#portal=([0-9a-f-]{36})$/i);
   if (mp) { st.portalPrev = { id: mp[1] }; st.view = "portal"; }
-  if (!st.escopo) st.escopo = gestor() ? "equipe" : "minhas";
+  // 24/11/2026 (Jean): todos abrem em "Minhas"; só gestores (admin e líder) alternam para "Equipe" com um clique
+  if (!gestor() || !st.escopo) st.escopo = "minhas";
   if (st.view === "entrada" && !gestor()) st.view = "inicio";
   casca(); renderView();
   await carregar();
