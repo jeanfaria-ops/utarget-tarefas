@@ -728,3 +728,22 @@ html,body{font-size:15px}
 .eu button{color:var(--ink3);border-radius:0}
 .eu button:hover{color:var(--ink);background:var(--sup2)}
 .tb th.n{font-family:inherit;letter-spacing:0}
+/* celular (24/11/2026): cabeçalho em duas linhas — logo, nome da tela e atualizar; depois busca e Minhas/Equipe para gestores (antes a troca sumia abaixo de 960 px e o nome da tela ficava escondido) */
+@media (max-width:960px){.top-seg{display:grid}}
+@media (max-width:860px){
+  .top .in{flex-wrap:wrap;row-gap:8px}
+  .top .mlogo{order:1;height:22px}
+  .top .tit{display:block;order:2;flex:1 1 calc(100% - 160px);min-width:0}
+  .top .tit h1{font-size:17px;line-height:1.2;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .tit .sub{display:none}
+  #att{order:3}
+  .busca{order:4;flex:1 1 140px;min-width:0;margin-left:0}
+  .top-seg{order:5;margin:0}
+  .top-seg button{padding:7px 10px;font-size:13px}
+  .tabbar button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+  .gav .gb{padding-bottom:calc(env(safe-area-inset-bottom) + 24px)}
+  .kpis{gap:0 12px}
+  .tbw{margin-left:-16px;margin-right:-16px;padding:0 16px}
+}
+.vseg{display:inline-grid!important;grid-auto-flow:column;grid-template-columns:none}
+@media (max-width:860px){.vseg{overflow-x:auto;max-width:100%}}
